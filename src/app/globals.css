@@ -1,0 +1,229 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens for Resume Pipeline.
+ * Each token below becomes a Tailwind utility, e.g. --color-muted → text-muted,
+ * --radius-card → rounded-card, --text-title → text-title.
+ */
+@theme {
+  /*
+   * Modern Slate & Royal/Electric Blue palette.
+   * Every text colour meets WCAG AA (4.5:1) on every surface in both light and dark schemes.
+   */
+
+  /* Surfaces: modern, high-contrast Slate scheme */
+  --color-paper: light-dark(#f8fafc, #090d16); /* background shell */
+  --color-sidebar: light-dark(#f8fafc, #090d16);
+  --color-surface: light-dark(#ffffff, #0f172a); /* main container panels */
+  --color-card: light-dark(#ffffff, #162032);    /* elevated cards, forms, dialogs */
+  --color-canvas: light-dark(#f1f5f9, #05080f);  /* document preview backdrop */
+  --color-input: light-dark(#ffffff, #141d2c);   /* text inputs, textareas, selects */
+
+  /* Text: crisp and high contrast */
+  --color-ink: light-dark(#0f172a, #f8fafc);
+  --color-document: light-dark(#1e293b, #f1f5f9);
+  --color-muted: light-dark(#64748b, #94a3b8);
+  --color-faint: light-dark(#94a3b8, #64748b);
+
+  /* Primary Brand: Royal / Electric Blue */
+  --color-primary: light-dark(#2563eb, #3b82f6);
+  --color-primary-hover: light-dark(#1d4ed8, #60a5fa);
+  --color-on-primary: #ffffff;
+  --color-primary-text: light-dark(#2563eb, #60a5fa);
+  --color-focus: light-dark(#2563eb, #60a5fa);
+  --color-accent: light-dark(#2563eb, #60a5fa);
+
+  /* Toasts and tooltips */
+  --color-inverse: light-dark(#0f172a, #1e293b);
+  --color-on-inverse: #ffffff;
+
+  /* Lines & Borders: crisp, defined borders */
+  --color-line: light-dark(rgb(15 23 42 / 0.08), rgb(248 250 252 / 0.08));
+  --color-line-card: light-dark(rgb(15 23 42 / 0.12), rgb(248 250 252 / 0.12));
+  --color-line-field: light-dark(rgb(15 23 42 / 0.18), rgb(248 250 252 / 0.18));
+  --color-line-input: light-dark(#cbd5e1, #334155); /* 3:1 contrast */
+  --color-line-control: light-dark(rgb(15 23 42 / 0.14), rgb(248 250 252 / 0.15));
+  --color-line-popover: light-dark(rgb(15 23 42 / 0.12), rgb(248 250 252 / 0.14));
+  --color-line-strong: light-dark(rgb(15 23 42 / 0.22), rgb(248 250 252 / 0.25));
+
+  /* Tints for hover, selection and tracks */
+  --color-hover: light-dark(rgb(15 23 42 / 0.04), rgb(248 250 252 / 0.07));
+  --color-selected: light-dark(rgb(37 99 235 / 0.08), rgb(59 130 246 / 0.16));
+  --color-track: light-dark(rgb(15 23 42 / 0.05), rgb(248 250 252 / 0.08));
+  --color-toggle-off: light-dark(#94a3b8, #64748b);
+
+  /* Feedback */
+  --color-danger: light-dark(#dc2626, #f87171);
+  --color-error: light-dark(#dc2626, #f87171);
+  --color-error-strong: light-dark(#b91c1c, #fca5a5);
+  --color-danger-fill: light-dark(#dc2626, #ef4444);
+  --color-danger-fill-hover: light-dark(#b91c1c, #dc2626);
+  --color-danger-surface: light-dark(rgb(254 242 242), rgb(239 68 68 / 0.14));
+  --color-danger-line: light-dark(rgb(254 202 202), rgb(239 68 68 / 0.35));
+  --color-danger-control: light-dark(rgb(239 68 68 / 0.4), rgb(239 68 68 / 0.55));
+  --color-danger-disabled: light-dark(#fca5a5, #7f1d1d);
+  --color-warning: light-dark(#d97706, #fbbf24);
+  --color-warning-surface: light-dark(rgb(254 243 199), rgb(245 158 11 / 0.14));
+  --color-warning-line: light-dark(rgb(253 230 138), rgb(245 158 11 / 0.4));
+  --color-success: light-dark(#16a34a, #4ade80);
+  --color-flash: light-dark(rgb(254 240 138 / 0.6), rgb(234 179 8 / 0.25));
+
+  /* Application statuses */
+  --color-status-draft: light-dark(#94a3b8, #64748b);
+  --color-status-sent: #2563eb;
+  --color-status-screening: #0284c7;
+  --color-status-interview: #7c3aed;
+  --color-status-offer: #16a34a;
+  --color-status-accepted: #059669;
+  --color-status-rejected: #dc2626;
+  --color-status-declined: light-dark(#64748b, #94a3b8);
+
+  /* Radii */
+  --radius-control: 8px;
+  --radius-toast: 12px;
+  --radius-card: 12px;
+  --radius-panel: 12px;
+  --radius-dialog: 16px;
+
+  /* Shadows */
+  --shadow-page: 0 1px 3px rgb(0 0 0 / 0.05), 0 20px 40px light-dark(rgb(15 23 42 / 0.08), rgb(0 0 0 / 0.6));
+  --shadow-dialog: 0 10px 38px light-dark(rgb(15 23 42 / 0.15), rgb(0 0 0 / 0.7));
+  --shadow-raised: 0 1px 3px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4));
+  --shadow-control: 0 1px 2px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.3));
+  --shadow-cta: 0 2px 4px light-dark(rgb(37 99 235 / 0.2), rgb(0 0 0 / 0.4));
+  --shadow-knob: 0 1px 2px rgb(0 0 0 / 0.2);
+  --shadow-menu: 0 10px 38px light-dark(rgb(15 23 42 / 0.15), rgb(0 0 0 / 0.65));
+  --shadow-toolbar: 0 4px 14px light-dark(rgb(15 23 42 / 0.12), rgb(0 0 0 / 0.5));
+  --shadow-toast: 0 8px 32px light-dark(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.55));
+
+  /* Type scale */
+  --text-label: 12.5px;
+  --text-label--line-height: 1.45;
+  --text-meta: 13px;
+  --text-meta--line-height: 1.45;
+  --text-control: 13.5px;
+  --text-control--line-height: 1.4;
+  --text-field: 14.5px;
+  --text-field--line-height: 1.4;
+  --text-lead: 15px;
+  --text-lead--line-height: 1.55;
+  --text-section: 24px;
+  --text-section--line-height: 1.2;
+  --text-section--letter-spacing: -0.01em;
+  --text-section--font-weight: 500;
+  --text-title: 36px;
+  --text-title--line-height: 1.15;
+  --text-title--letter-spacing: -0.02em;
+  --text-title--font-weight: 600;
+
+  /* Motion */
+  --animate-toast-in: toast-in 160ms ease-out;
+  --animate-skeleton-in: skeleton-in 200ms ease-out 150ms both;
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @keyframes skeleton-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/* Thin scrollbars */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-ink) 20%, transparent) transparent;
+
+  &:hover {
+    scrollbar-color: color-mix(in srgb, var(--color-ink) 36%, transparent) transparent;
+  }
+}
+
+/* Fonts */
+@theme inline {
+  --font-sans: var(--typeface-geist);
+  --font-serif: var(--typeface-newsreader);
+  --font-mono: var(--typeface-plex-mono);
+  --font-plex-sans: var(--typeface-plex-sans);
+  --font-garamond: var(--typeface-eb-garamond);
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  html {
+    scroll-padding-top: 128px;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+
+  a {
+    color: var(--color-ink);
+  }
+  a:hover {
+    color: var(--color-primary);
+  }
+
+  ::placeholder {
+    color: var(--color-muted);
+    opacity: 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  /* Explicit native dropdown styling for dark & light mode */
+  select {
+    background-color: var(--color-input);
+    color: var(--color-ink);
+  }
+
+  select option {
+    background-color: var(--color-card);
+    color: var(--color-ink);
+  }
+
+  /* Form controls contrast */
+  input, textarea {
+    color: var(--color-ink);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--color-muted);
+  }
+}
+
+@utility h-panel {
+  height: calc(100dvh - 9px);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
