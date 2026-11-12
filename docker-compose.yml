@@ -1,0 +1,27 @@
+services:
+  resume-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resume-builder
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:3000"
+    volumes:
+      # Persistent Docker volume for SQLite database & uploaded data
+      - resume_data:/app/data
+      # If you prefer a local folder on your VPS host instead, use:
+      # - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    extra_hosts:
+      # Allows the container to access host services (e.g., local Ollama on port 11434)
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  resume_data:
+    name: resume_builder_data
+
