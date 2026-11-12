@@ -1,27 +1,49 @@
 services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: resume-builder-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resume_builder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-resume_builder}
+    # Uncomment if you want direct host access to the containerized database:
+    # ports:
+    #   - "127.0.0.1:5433:5432"
+    volumes:
+      # Persistent Docker volume for PostgreSQL 18+ data
+      - postgres_data:/var/lib/postgresql
+      # Initialize relational schema when the volume is created for the first time
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   resume-builder:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: resume-builder
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "127.0.0.1:4000:3000"
-    volumes:
-      # Persistent Docker volume for SQLite database & uploaded data
-      - resume_data:/app/data
-      # If you prefer a local folder on your VPS host instead, use:
-      # - ./data:/app/data
     env_file:
       - .env
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     extra_hosts:
       # Allows the container to access host services (e.g., local Ollama on port 11434)
       - "host.docker.internal:host-gateway"
 
 volumes:
-  resume_data:
-    name: resume_builder_data
-
+  postgres_data:
+    name: resume_builder_postgres_data

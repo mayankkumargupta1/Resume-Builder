@@ -3,10 +3,10 @@
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-A self-hosted, multi-user **AI Resume Builder**, **Zero-Hallucination Job Tailoring Studio**, **Application Tracker**, and **Enterprise ATS Diagnostic Engine** powered by **Next.js 15**, **TypeScript**, and **SQLite** (`better-sqlite3`).
+A self-hosted, multi-user **AI Resume Builder**, **Zero-Hallucination Job Tailoring Studio**, **Application Tracker**, and **Enterprise ATS Diagnostic Engine** powered by **Next.js 15**, **TypeScript**, and **PostgreSQL** (`pg`).
 
 Built to keep a verified **Master Career Dossier** pristine while generating tailored, print-ready resumes with deterministic ATS scoring across major enterprise Applicant Tracking Systems.
 
@@ -43,7 +43,7 @@ Overall ATS Score = (Hard Skills Match      × 0.40)
 - Searchable pipeline dashboard with status tracking (`generated` → `applied` → `interviewing` → `offered` → `rejected` → `archived`), match score KPIs, application follow-up notes, standalone print views, and one-click ATS diagnostic reports.
 
 ### 5. Multi-User Authentication & Root Admin Console (`/login`, `/signup`, `/admin`)
-- Isolated per-user profiles, themes, settings, and tailored application drafts stored in **SQLite (WAL mode)**.
+- Isolated per-user profiles, themes, settings, and tailored application drafts stored in **PostgreSQL**.
 - Secure **scrypt** password hashing with random salts and timing-safe verification + HTTP-only cookie sessions.
 - Dedicated Root Administrator dashboard (`/admin`) for user provisioning, role inspection, and account enable/disable lifecycle controls.
 
@@ -55,7 +55,7 @@ Overall ATS Score = (Hard Skills Match      × 0.40)
 flowchart LR
     JD[Job URL or Raw JD] --> Scraper[HTML Job Scraper]
     Scraper --> Agent[AI Curation Agent]
-    Profile[(Master SQLite Profile)] --> Agent
+    Profile[(Master PostgreSQL Profile)] --> Agent
     Agent -->|"DeepSeek / OpenAI / Anthropic / Ollama / Heuristic"| Tailored[Tailored Headline & Summary]
     Tailored --> ATS[Deterministic ATS Engine]
     Profile --> ATS
@@ -74,7 +74,7 @@ flowchart LR
 | **Framework** | Next.js 15 (App Router, Server Actions, Force-Dynamic SSR) |
 | **Language** | TypeScript 5 (Strict Mode) |
 | **UI & Styling** | React 19, Tailwind CSS v4, Radix UI, Lucide Icons, `@dnd-kit` |
-| **Database** | SQLite via `better-sqlite3` (`WAL` journal mode, foreign keys) |
+| **Database** | PostgreSQL via `pg` (connection pooling, JSONB storage, foreign keys) |
 | **AI & Parsing** | OpenAI-compatible Gateway (`DeepSeek` / `GPT`), Anthropic, Local `ollama`, `node-html-parser`, `zod` |
 | **Runtime** | [Bun](https://bun.sh) or Node.js 18+ |
 
@@ -111,8 +111,21 @@ Edit `.env.local` with your preferred inference endpoint and admin credentials (
 | `ROOT_ADMIN_USERNAME` | Email identifier for the root administrator (`/admin`) | `admin@resumepipeline.com` |
 | `ROOT_ADMIN_PASSWORD` | Bootstrap admin password (hashed via scrypt at startup) | Random one-time key if unset |
 | `ROOT_ADMIN_PASSWORD_HASH` | Pre-computed `salt:hex` scrypt hash (overrides plaintext) | `""` |
+| `POSTGRES_USER` | PostgreSQL database user | `resume_builder` |
+| `POSTGRES_PASSWORD` | PostgreSQL database password (required for Docker Compose) | `""` |
+| `POSTGRES_DB` | PostgreSQL database name | `resume_builder` |
+| `POSTGRES_HOST` | PostgreSQL host (`postgres` in Docker Compose, `localhost` locally) | `localhost` |
+| `POSTGRES_PORT` | PostgreSQL port | `5432` |
+| `DATABASE_URL` | Optional full PostgreSQL connection string override | `""` |
 
-### 3. Run Development or Production Build
+### 3. Run with Docker Compose (Recommended) or Manually
+
+```bash
+# Spin up PostgreSQL (with persistent volume) + Next.js app
+docker compose up -d --build
+```
+
+Or run locally against PostgreSQL:
 
 ```bash
 # Development server
@@ -124,14 +137,14 @@ bun run build
 bun run start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to sign up or log in. SQLite tables in `data/resume_pipeline.db` initialize automatically on first boot following [`schema.sql`](./schema.sql).
+Open [http://localhost:3000](http://localhost:3000) (or [http://localhost:4000](http://localhost:4000) via Docker Compose) to sign up or log in. PostgreSQL tables initialize automatically on first boot following [`schema.sql`](./schema.sql).
 
 ---
 
 ## Project Structure
 
 ```text
-├── schema.sql                       # SQLite relational schema reference
+├── schema.sql                       # PostgreSQL relational schema reference
 ├── .env.example                     # Environment configuration template
 ├── src/
 │   ├── middleware.ts                # Auth protection for application routes
@@ -162,7 +175,7 @@ Open [http://localhost:3000](http://localhost:3000) to sign up or log in. SQLite
 │       ├── ai-agent.ts              # Zero-hallucination prompt & LLM gateway client
 │       ├── ats-engine.ts            # Deterministic multi-factor ATS scoring & platform audits
 │       ├── auth.ts                  # Session management & auth helpers
-│       ├── db.ts                    # SQLite connection, WAL setup & data access layer
+│       ├── db.ts                    # PostgreSQL pool, schema init & data access layer
 │       ├── job-scraper.ts           # URL job description extractor
 │       ├── themes.ts                # 12 curated themes & token system
 │       └── profile.ts               # Core TypeScript dossier interfaces & normalization

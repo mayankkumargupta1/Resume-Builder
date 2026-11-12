@@ -23,7 +23,7 @@ export default async function AdminPage() {
     );
   }
 
-  const allUsers = getAllUsers();
+  const allUsers = await getAllUsers();
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-paper">

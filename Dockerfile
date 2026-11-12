@@ -24,8 +24,8 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Ensure data directory exists with ownership for non-root bun user
-RUN mkdir -p /app/data && chown -R bun:bun /app
+# Ensure ownership for non-root bun user
+RUN chown -R bun:bun /app
 
 # Copy built application & essential runtime files
 COPY --from=builder --chown=bun:bun /app/.next ./.next
@@ -36,8 +36,6 @@ COPY --from=builder --chown=bun:bun /app/next.config.ts ./next.config.ts
 
 USER bun
 EXPOSE 3000
-
-VOLUME ["/app/data"]
 
 CMD ["bun", "run", "start"]
 

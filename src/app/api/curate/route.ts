@@ -44,8 +44,8 @@ export async function POST(req: Request) {
       modelName: modelName || "deepseek-v4.1",
     });
 
-    // Persist the curated resume and the full job description in SQLite for tracking
-    const draftId = saveTailoredDraft(uid, {
+    // Persist the curated resume and the full job description in PostgreSQL for tracking
+    const draftId = await saveTailoredDraft(uid, {
       title: analysis.title || "Target Role",
       company: analysis.company || "Target Company",
       job_text: jobText,

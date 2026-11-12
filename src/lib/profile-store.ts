@@ -39,7 +39,7 @@ export async function getActiveUserId(): Promise<string | null> {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (token) {
-      const user = getUserFromSession(token);
+      const user = await getUserFromSession(token);
       if (user) return user.id;
     }
   } catch {
@@ -62,7 +62,7 @@ export async function getAuthenticatedUserIdForPage(): Promise<string> {
   if (!token) {
     redirect("/login");
   }
-  const user = getUserFromSession(token);
+  const user = await getUserFromSession(token);
   if (!user) {
     redirect("/login");
   }
@@ -76,7 +76,7 @@ export async function loadProfile(userId?: string): Promise<ProfileData> {
 
 export async function saveProfile(profile: ProfileData, userId?: string): Promise<void> {
   const uid = userId || (await requireActiveUserId());
-  saveUserProfile(uid, profile);
+  await saveUserProfile(uid, profile);
 }
 
 export async function loadThemes(userId?: string): Promise<ThemeData[]> {
@@ -88,7 +88,7 @@ export async function saveCustomThemes(themes: ThemeData[], userId?: string): Pr
   const uid = userId || (await requireActiveUserId());
   const custom = themes.filter((t) => !t.builtIn);
   for (const theme of custom) {
-    saveUserCustomTheme(uid, theme);
+    await saveUserCustomTheme(uid, theme);
   }
 }
 
@@ -99,5 +99,5 @@ export async function loadSettings(userId?: string): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings, userId?: string): Promise<void> {
   const uid = userId || (await requireActiveUserId());
-  saveUserSettings(uid, settings);
+  await saveUserSettings(uid, settings);
 }

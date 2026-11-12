@@ -16,14 +16,14 @@ export async function GET(req: Request) {
     const id = searchParams.get("id");
 
     if (id) {
-      const draft = getTailoredDraftById(user.id, id);
+      const draft = await getTailoredDraftById(user.id, id);
       if (!draft) {
         return NextResponse.json({ success: false, error: "Draft not found" }, { status: 404 });
       }
       return NextResponse.json({ success: true, draft });
     }
 
-    const drafts = getUserTailoredDrafts(user.id);
+    const drafts = await getUserTailoredDrafts(user.id);
     return NextResponse.json({ success: true, drafts });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -46,12 +46,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: "Draft ID required" }, { status: 400 });
     }
 
-    const ok = updateTailoredDraft(user.id, id, { status, notes, title, company });
+    const ok = await updateTailoredDraft(user.id, id, { status, notes, title, company });
     if (!ok) {
       return NextResponse.json({ success: false, error: "Failed to update draft or draft not found." }, { status: 404 });
     }
 
-    const updated = getTailoredDraftById(user.id, id);
+    const updated = await getTailoredDraftById(user.id, id);
     return NextResponse.json({ success: true, draft: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -72,7 +72,7 @@ export async function DELETE(req: Request) {
     if (!id) {
       return NextResponse.json({ success: false, error: "Draft ID required" }, { status: 400 });
     }
-    const ok = deleteTailoredDraft(user.id, id);
+    const ok = await deleteTailoredDraft(user.id, id);
     return NextResponse.json({ success: ok });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

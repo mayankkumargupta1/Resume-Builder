@@ -20,7 +20,7 @@ export async function getCurrentUser(): Promise<UserRecord | null> {
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
     if (token) {
-      const user = getUserFromSession(token);
+      const user = await getUserFromSession(token);
       if (user) return user;
     }
   } catch {
@@ -50,7 +50,7 @@ export async function login(
   const rootCreds = getRootAdminCredentials();
   const lookup = (trimmed === "admin" || trimmed === rootCreds.username) ? rootCreds.username : trimmed;
 
-  const user = getUserByEmail(lookup);
+  const user = await getUserByEmail(lookup);
   if (!user) {
     return { success: false, error: "No account found with this email." };
   }
@@ -64,7 +64,7 @@ export async function login(
     return { success: false, error: "This account has been disabled. Please contact the administrator." };
   }
 
-  const token = createSession(user.id);
+  const token = await createSession(user.id);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -85,7 +85,7 @@ export async function adminLoginWithPassword(
   const rootCreds = getRootAdminCredentials();
   const lookup = (trimmed === "admin" || trimmed === rootCreds.username) ? rootCreds.username : trimmed;
 
-  const user = getUserByEmail(lookup);
+  const user = await getUserByEmail(lookup);
   if (!user) {
     return { success: false, error: "No account found with this email." };
   }
@@ -103,7 +103,7 @@ export async function adminLoginWithPassword(
     return { success: false, error: "Access denied. Only the root administrator has access." };
   }
 
-  const token = createSession(user.id);
+  const token = await createSession(user.id);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -128,13 +128,13 @@ export async function signup(
     return { success: false, error: "Password must be at least 6 characters long." };
   }
 
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing) {
     return { success: false, error: "An account with this email already exists." };
   }
 
-  const user = createUser(email, password, name || "New User");
-  const token = createSession(user.id);
+  const user = await createUser(email, password, name || "New User");
+  const token = await createSession(user.id);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -165,13 +165,13 @@ export async function adminCreateUser(
     return { success: false, error: "Password must be at least 6 characters." };
   }
 
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing) {
     return { success: false, error: "An account with this email already exists." };
   }
 
   // System rule: Exactly one root administrator is configured via .env; all created users have standard user role
-  const user = createUser(email, password, name || "New User", "user");
+  const user = await createUser(email, password, name || "New User", "user");
   return { success: true, user };
 }
 
@@ -179,7 +179,7 @@ export async function logout(): Promise<void> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (token) {
-    deleteSession(token);
+    await deleteSession(token);
     cookieStore.delete(SESSION_COOKIE_NAME);
   }
 }

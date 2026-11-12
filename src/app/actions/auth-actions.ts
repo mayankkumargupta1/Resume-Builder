@@ -77,7 +77,7 @@ export async function adminDeleteUserAction(formData: FormData) {
   if (!current || current.role !== "admin") {
     return;
   }
-  deleteUser(userId);
+  await deleteUser(userId);
   revalidatePath("/admin");
 }
 
@@ -89,6 +89,6 @@ export async function adminToggleUserStatusAction(formData: FormData) {
     return;
   }
   const shouldDisable = currentStatus === "active";
-  setUserDisabled(userId, shouldDisable);
+  await setUserDisabled(userId, shouldDisable);
   revalidatePath("/admin");
 }
