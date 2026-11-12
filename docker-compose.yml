@@ -32,7 +32,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:4000:3000"
+      - "127.0.0.1:5000:3000"
     env_file:
       - .env
     environment:
