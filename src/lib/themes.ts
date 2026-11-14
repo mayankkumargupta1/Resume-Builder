@@ -35,6 +35,9 @@ export type ThemeData = {
   /** The profile photo's shape and place (#224). */
   photoShape: PhotoShape;
   photoPosition: PhotoPosition;
+  entryStyle?: "INLINE" | "STACKED";
+  pipeContacts?: boolean;
+  bulletSkills?: boolean;
 };
 
 /** What a theme that doesn't say otherwise has: the look of the first six built-ins. */
@@ -44,6 +47,9 @@ export const THEME_STYLE_DEFAULTS = {
   dateStyle: DateStyle.INLINE,
   photoShape: PhotoShape.CIRCLE,
   photoPosition: PhotoPosition.HEADER_END,
+  entryStyle: "INLINE",
+  pipeContacts: false,
+  bulletSkills: false,
 } satisfies Partial<ThemeData>;
 type StyleField = keyof typeof THEME_STYLE_DEFAULTS;
 
@@ -52,6 +58,7 @@ export const BUILT_IN_THEMES: ThemeData[] = (
   [
     { id: "editorial", name: "Editorial", headFont: "NEWSREADER", bodyFont: "GEIST", accent: "#7a3b2e", layout: "SINGLE", align: "LEFT", headingStyle: "PLAIN", density: "REGULAR" },
     { id: "classic", name: "Classic", headFont: "GARAMOND", bodyFont: "GARAMOND", accent: "#1d1c1a", layout: "SINGLE", align: "CENTER", headingStyle: "RULE", density: "REGULAR", photoPosition: "ABOVE_NAME" },
+    { id: "corporate", name: "Corporate", headFont: "GARAMOND", bodyFont: "GARAMOND", accent: "#1d1c1a", layout: "SINGLE", align: "LEFT", headingStyle: "RULE_CAPS", density: "COMPACT", entryStyle: "STACKED", pipeContacts: true, bulletSkills: true },
     { id: "modern", name: "Modern", headFont: "GEIST", bodyFont: "GEIST", accent: "#2f5d8a", layout: "SPLIT", align: "LEFT", headingStyle: "CAPS", density: "REGULAR", photoShape: "ROUNDED", photoPosition: "SIDEBAR" },
     { id: "minimal", name: "Minimal", headFont: "PLEX_SANS", bodyFont: "PLEX_SANS", accent: "#6f6a62", layout: "SINGLE", align: "LEFT", headingStyle: "CAPS", density: "AIRY", photoShape: "SQUARE" },
     { id: "technical", name: "Technical", headFont: "PLEX_MONO", bodyFont: "PLEX_SANS", accent: "#2d6a4f", layout: "SPLIT", align: "LEFT", headingStyle: "RULE", density: "COMPACT", photoShape: "SQUARE", photoPosition: "SIDEBAR" },
@@ -165,6 +172,7 @@ export const HEADING_STYLES: Record<
   }
 > = {
   [HeadingStyle.RULE]: { label: "Underlined", size: 12, weight: 600, uppercase: false, tracking: "0", rule: true, padding: 3 },
+  [HeadingStyle.RULE_CAPS]: { label: "Underlined uppercase", size: 11, weight: 700, uppercase: true, tracking: ".08em", rule: true, padding: 3 },
   [HeadingStyle.CAPS]: { label: "Small caps", size: 9.5, weight: 600, uppercase: true, tracking: ".14em", rule: false, padding: 0 },
   [HeadingStyle.PLAIN]: { label: "Plain", size: 15, weight: 500, uppercase: false, tracking: "-.005em", rule: false, padding: 0 },
   [HeadingStyle.BAR]: { label: "Accent bar", size: 9.5, weight: 700, uppercase: true, tracking: ".14em", rule: false, padding: 0, marker: "bar" },
@@ -278,6 +286,10 @@ export function resolveTheme(theme: ThemeData, layout: ThemeLayout = theme.layou
     heading: HEADING_STYLES[theme.headingStyle],
     density: DENSITIES[theme.density],
     name: serifHeading ? { size: 30, weight: 500 } : { size: 25, weight: 600 },
+    stackedEntries: (theme as any).entryStyle === "STACKED" || theme.id === "corporate",
+    pipeContacts: Boolean((theme as any).pipeContacts || theme.id === "corporate"),
+    bulletSkills: Boolean((theme as any).bulletSkills || theme.id === "corporate"),
+    otherSectionTitle: theme.id === "corporate",
   };
 }
 export type ResolvedTheme = ReturnType<typeof resolveTheme>;

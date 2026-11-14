@@ -117,6 +117,7 @@ export const DEFAULT_PROFILE_DATA: ProfileData = {
       id: "edu-1",
       degree: "B.S. in Computer Science",
       school: "University of California, Berkeley",
+      location: "Berkeley, CA",
       notes: "Dean's Honors List. Coursework: Distributed Systems, Algorithms, Machine Learning.",
       startYear: 2017,
       startMonth: 9,

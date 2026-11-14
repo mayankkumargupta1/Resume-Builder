@@ -42,6 +42,13 @@ function EducationForm({
         value={entry.school}
         onChange={(event) => set({ school: event.target.value })}
       />
+      <Input
+        className="col-span-2"
+        label="Location (optional)"
+        placeholder="Austin, TX or San Francisco, CA"
+        value={entry.location ?? ""}
+        onChange={(event) => set({ location: event.target.value })}
+      />
       <MonthYearField
         label="Started"
         value={{ month: entry.startMonth, year: entry.startYear }}
@@ -86,7 +93,7 @@ export function EducationSection({ profile, update, order }: { profile: ProfileD
       }}
       summary={(entry) => ({
         title: entry.degree.trim() || "New entry",
-        subtitle: entry.school.trim(),
+        subtitle: [entry.school, entry.location].filter(Boolean).map((s) => s?.trim()).filter(Boolean).join(" · "),
         meta: formatDateRange(entry),
       })}
       create={() => createEducation({})}

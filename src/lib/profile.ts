@@ -128,7 +128,7 @@ export type ProjectItem = DateSpan & {
   bullets: string;
   skillIds: string[];
 };
-export type EducationItem = DateSpan & { id: string; degree: string; school: string; notes: string };
+export type EducationItem = DateSpan & { id: string; degree: string; school: string; location?: string; notes: string };
 /** A certification: name, issuing organization, issue date, credential URL, and onResumes toggle */
 export type CertificationItem = {
   id: string;

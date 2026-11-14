@@ -34,6 +34,7 @@ export enum HeadingStyle {
   PLAIN = "PLAIN",
   BAR = "BAR",
   BAND = "BAND",
+  RULE_CAPS = "RULE_CAPS",
 }
 
 export enum HeaderStyle {

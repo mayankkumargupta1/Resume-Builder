@@ -19,6 +19,7 @@ export type ResumeContent = {
     id: string;
     role: string;
     company: string;
+    location: string;
     /** A line about the company or the role (#257), as written; never tailored. */
     descriptor: string;
     dates: string;
@@ -36,7 +37,7 @@ export type ResumeContent = {
     bullets: string[];
     skills: string[];
   }[];
-  education: { id: string; degree: string; school: string; dates: string; notes: string }[];
+  education: { id: string; degree: string; school: string; location: string; dates: string; notes: string }[];
   /** Certifications in the profile's order. */
   certifications: {
     id: string;
@@ -103,8 +104,8 @@ export const displayLink = (link: string) =>
 const lines = (text: string) =>
   text
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
 
 /** What the resume shows, with its dates and levels in the words of `labels`. */
 export function resumeContent(
@@ -120,6 +121,7 @@ export function resumeContent(
     id: entry.id,
     role: entry.role.trim(),
     company: entry.company.trim(),
+    location: entry.location ? entry.location.trim() : "",
     descriptor: entry.descriptor.trim(),
     dates: formatDateRange(entry, dates),
     bullets: lines(bullets),
@@ -159,6 +161,7 @@ export function resumeContent(
     id: entry.id,
     degree: entry.degree.trim(),
     school: entry.school.trim(),
+    location: (entry as any).location ? (entry as any).location.trim() : "",
     dates: formatDateRange(entry, dates),
     notes: notes.trim(),
   });
