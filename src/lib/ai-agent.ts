@@ -49,24 +49,30 @@ export interface AnalyzeAndCurateOptions {
   modelName?: string;
 }
 
-export function resolveModelName(name?: string): string {
-  if (!name) return DEFAULT_MODEL;
-  const lower = name.toLowerCase().trim();
-  if (
-    lower.includes("deepseek-v4.1") ||
-    lower.includes("deepseek-v4-pro") ||
-    lower === "deepseek" ||
-    lower === "pro"
-  ) {
-    return "@cf/deepseek-ai/deepseek-v4-pro-0813";
+export function resolveModelName(name?: string, baseUrl?: string): string {
+  const model = (name || DEFAULT_MODEL).trim();
+  const url = (baseUrl || DEFAULT_GATEWAY_URL).toLowerCase();
+  const isCloudflare = url.includes("workers.dev") || url.includes("cloudflare");
+
+  if (isCloudflare) {
+    const lower = model.toLowerCase();
+    if (
+      lower.includes("deepseek-v4.1") ||
+      lower.includes("deepseek-v4-pro") ||
+      lower === "deepseek" ||
+      lower === "pro"
+    ) {
+      return "@cf/deepseek-ai/deepseek-v4-pro-0813";
+    }
+    if (lower.includes("flash") || lower.includes("fast")) {
+      return "@cf/deepseek-ai/deepseek-v4-flash-0731";
+    }
+    if (lower.includes("r1")) {
+      return "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
+    }
   }
-  if (lower.includes("flash") || lower.includes("fast")) {
-    return "@cf/deepseek-ai/deepseek-v4-flash-0731";
-  }
-  if (lower.includes("r1")) {
-    return "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
-  }
-  return name.trim();
+
+  return model;
 }
 
 export async function curateResumeForJob(
@@ -75,7 +81,7 @@ export async function curateResumeForJob(
   const {
     profile,
     jobText,
-    provider = "deepseek",
+    provider = "gateway",
     apiKey = DEFAULT_GATEWAY_KEY,
     baseUrl = DEFAULT_GATEWAY_URL,
     modelName = DEFAULT_MODEL,
@@ -86,7 +92,7 @@ export async function curateResumeForJob(
 
   try {
     if (provider === "deepseek" || provider === "gateway" || provider === "openai") {
-      rawJson = await callOpenAICompatible(prompt, apiKey, modelName, baseUrl);
+      rawJson = await callOpenAICompatible(prompt, apiKey, modelName, baseUrl, true);
     } else if (provider === "ollama") {
       rawJson = await callOllama(prompt, modelName || "gemma4:12b");
     } else if (provider === "anthropic" && apiKey) {
@@ -96,11 +102,15 @@ export async function curateResumeForJob(
     console.warn("Primary LLM call failed. Attempting fallback:", error);
     try {
       if (apiKey) {
+        const isCloudflare = baseUrl.includes("workers.dev") || baseUrl.includes("cloudflare");
+        const fallbackModel = isCloudflare ? "@cf/deepseek-ai/deepseek-v4-flash-0731" : modelName;
+        // Retry without response_format constraint (for models/providers that reject json_object)
         rawJson = await callOpenAICompatible(
           prompt,
           apiKey,
-          "@cf/deepseek-ai/deepseek-v4-flash-0731",
-          baseUrl
+          fallbackModel,
+          baseUrl,
+          false
         );
       } else {
         rawJson = await callOllama(prompt, "gemma4:12b");
@@ -246,39 +256,53 @@ async function callOpenAICompatible(
   prompt: string,
   apiKey: string,
   model: string,
-  baseUrl: string
+  baseUrl: string,
+  requireJsonFormat: boolean = true
 ): Promise<string> {
   if (!apiKey || !baseUrl) {
     throw new Error("AI_GATEWAY_KEY or AI_GATEWAY_URL is not configured.");
   }
 
-  const actualModel = resolveModelName(model);
+  const actualModel = resolveModelName(model, baseUrl);
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90000);
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  // OpenRouter attribution headers (recommended by OpenRouter)
+  if (baseUrl.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = "https://resumepipeline.com";
+    headers["X-Title"] = "Resume Pipeline";
+  }
+
+  const requestBody: Record<string, unknown> = {
+    model: actualModel,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an elite, ATS-certified technical resume curator and career strategist. You only select authentic candidate data and generate profile summaries. Always output raw JSON only.",
+      },
+      { role: "user", content: prompt },
+    ],
+    max_tokens: 3000,
+    temperature: 0.1,
+  };
+
+  if (requireJsonFormat) {
+    requestBody.response_format = { type: "json_object" };
+  }
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: actualModel,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an elite, ATS-certified technical resume curator and career strategist. You only select authentic candidate data and generate profile summaries. Always output raw JSON only.",
-          },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 3000,
-        temperature: 0.1,
-      }),
+      headers,
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
 

@@ -39,9 +39,9 @@ export async function POST(req: Request) {
     const { analysis, tailored } = await curateResumeForJob({
       profile,
       jobText,
-      provider: provider || "deepseek",
+      provider: provider || "gateway",
       apiKey,
-      modelName: modelName || "deepseek-v4.1",
+      modelName,
     });
 
     // Persist the curated resume and the full job description in PostgreSQL for tracking
