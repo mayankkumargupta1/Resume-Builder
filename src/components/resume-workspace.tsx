@@ -19,7 +19,8 @@ import { PAPER_SIZES, printCss, type ThemeData } from "@/lib/themes";
 import { deleteTheme, duplicateTheme, importTheme, saveTheme, setBaseTheme } from "@/components/themes/actions";
 import { draftFrom, ThemeBuilder, type ThemeDraft } from "@/components/themes/theme-builder";
 import { ThemePicker } from "@/components/themes/theme-picker";
-import { Printer, Sparkles, SlidersHorizontal, ArrowLeft, RefreshCw, Check, Globe } from "lucide-react";
+import { Printer, Sparkles, SlidersHorizontal, ArrowLeft, RefreshCw, Check, Globe, UploadCloud } from "lucide-react";
+import { CvImportModal } from "@/components/profile/cv-import-modal";
 
 export type ResumeWorkspaceProps = {
   profile: ProfileData;
@@ -94,15 +95,22 @@ export function ResumeWorkspace({
   const savedId = useRef(baseThemeId);
   const pickedId = useRef(baseThemeId);
 
+  const [workspaceProfile, setWorkspaceProfile] = useState(profile);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  useEffect(() => {
+    setWorkspaceProfile(profile);
+  }, [profile]);
+
   const base = themes.find((entry) => entry.id === baseId) ?? themes[0];
   const theme: ThemeData = draft ? { ...draft, id: draft.id ?? "draft", builtIn: false } : base;
 
   const empty =
-    !profile.basics.name.trim() &&
-    profile.experience.length === 0 &&
-    profile.projects.length === 0 &&
-    profile.education.length === 0 &&
-    profile.skills.length === 0;
+    !workspaceProfile.basics.name.trim() &&
+    workspaceProfile.experience.length === 0 &&
+    workspaceProfile.projects.length === 0 &&
+    workspaceProfile.education.length === 0 &&
+    workspaceProfile.skills.length === 0;
 
   const panelArea = useRef<HTMLElement>(null);
   const movedPanel = useRef(false);
@@ -210,7 +218,7 @@ export function ResumeWorkspace({
     }
 
     // Save directly to profile
-    let updatedProfile = { ...profile };
+    let updatedProfile = { ...workspaceProfile };
 
     if (unitId === "summary") {
       updatedProfile = {
@@ -243,6 +251,7 @@ export function ResumeWorkspace({
       };
     }
 
+    setWorkspaceProfile(updatedProfile);
     onUpdateProfile?.(updatedProfile);
 
     try {
@@ -284,15 +293,15 @@ export function ResumeWorkspace({
     }
 
     if (!initialText) {
-      if (id === "summary") initialText = profile.basics.summary;
+      if (id === "summary") initialText = workspaceProfile.basics.summary;
       else if (id.startsWith("project:")) {
-        const p = profile.projects.find((item) => item.id === id.replace("project:", ""));
+        const p = workspaceProfile.projects.find((item) => item.id === id.replace("project:", ""));
         initialText = p?.bullets ?? "";
       } else if (id.startsWith("experience:")) {
-        const e = profile.experience.find((item) => item.id === id.replace("experience:", ""));
+        const e = workspaceProfile.experience.find((item) => item.id === id.replace("experience:", ""));
         initialText = e?.bullets ?? "";
       } else if (id.startsWith("education:")) {
-        const edu = profile.education.find((item) => item.id === id.replace("education:", ""));
+        const edu = workspaceProfile.education.find((item) => item.id === id.replace("education:", ""));
         initialText = edu?.notes ?? "";
       }
     }
@@ -378,6 +387,15 @@ export function ResumeWorkspace({
               ))}
             </div>
 
+            <Button
+              variant="secondary"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-1.5 cursor-pointer"
+            >
+              <UploadCloud className="size-3.5 text-primary" />
+              <span>Import CV</span>
+            </Button>
+
             {onNavigateToProfile ? (
               <Button variant="secondary" onClick={onNavigateToProfile}>
                 Edit profile & projects
@@ -407,18 +425,31 @@ export function ResumeWorkspace({
           meta={(pages) => `${PAPER_SIZES[paper].label} · ${pages} ${pages === 1 ? "page" : "pages"}`}
           notice={(pages) =>
             empty ? (
-              <p role="note" className="rounded-card bg-card px-4 py-2.5 text-meta text-muted">
-                Your resume fills in from your profile. Add your name, projects, and experience, and it takes shape here.{" "}
-                {onNavigateToProfile ? (
-                  <button onClick={onNavigateToProfile} className="text-ink underline underline-offset-2">
-                    Go to your profile
-                  </button>
-                ) : (
-                  <Link href="/profile" className="text-ink underline underline-offset-2">
-                    Go to your profile
-                  </Link>
-                )}
-              </p>
+              <div role="note" className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-card bg-card p-3 text-meta text-muted shadow-xs">
+                <div>
+                  <span className="font-semibold text-ink">New here?</span> Fast-track your resume by importing your existing CV, or fill out your profile manually.
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-1.5 cursor-pointer font-semibold shadow-cta"
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span>Import CV</span>
+                  </Button>
+                  {onNavigateToProfile ? (
+                    <Button variant="secondary" size="sm" onClick={onNavigateToProfile}>
+                      Edit profile
+                    </Button>
+                  ) : (
+                    <Link href="/profile" className={buttonClassName("secondary", "sm")}>
+                      Edit profile
+                    </Link>
+                  )}
+                </div>
+              </div>
             ) : (
               maxPages !== null &&
               pages > maxPages && (
@@ -431,7 +462,7 @@ export function ResumeWorkspace({
         >
           <ResumeDocument
             theme={theme}
-            profile={profile}
+            profile={workspaceProfile}
             paper={paper}
             includeReferences={includeReferences}
             language={language}
@@ -454,7 +485,7 @@ export function ResumeWorkspace({
               <ThemePicker
                 themes={themes}
                 activeId={theme.id}
-                userName={profile.basics.name.trim() || "Your name"}
+                userName={workspaceProfile.basics.name.trim() || "Your name"}
                 onSelect={selectTheme}
                 onCustomize={() => openPanel("customize", true)}
                 actions={{
@@ -487,6 +518,17 @@ export function ResumeWorkspace({
         description="Editorial becomes your base theme. This can't be undone, but you can export the theme first."
         confirmLabel="Delete theme"
         onConfirm={() => deleting && void remove(deleting)}
+      />
+
+      <CvImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={(imported) => {
+          setWorkspaceProfile(imported);
+          onUpdateProfile?.(imported);
+          setIsImportModalOpen(false);
+        }}
+        currentProfile={workspaceProfile}
       />
     </div>
   );

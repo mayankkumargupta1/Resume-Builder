@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { UploadCloud, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { Button, buttonClassName } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { TrackSaveContext, useSaveTracker } from "@/components/save-tracker";
 import { SkillsSection } from "./skills-section";
 import { StrengthMeter } from "./strength-meter";
 import { SECTIONS, type SectionId } from "./sections";
+import { CvImportModal } from "./cv-import-modal";
 
 export type ProfileOrder = { experience: EntryOrder; projects: EntryOrder; education: EntryOrder };
 
@@ -36,7 +38,15 @@ export function ProfileEditor({
 }) {
   const [profile, setProfile] = useState(initial);
   const [section, setSection] = useState<SectionId>(initialSection);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [dismissedPrompt, setDismissedPrompt] = useState(false);
   const saves = useSaveTracker();
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setDismissedPrompt(localStorage.getItem("dismissed_cv_prompt") === "true");
+    }
+  }, []);
 
   useEffect(() => {
     setProfile(initial);
@@ -55,6 +65,14 @@ export function ProfileEditor({
       return next;
     });
   };
+
+  const isNewUser =
+    profile.experience.length === 0 &&
+    profile.projects.length === 0 &&
+    profile.education.length === 0 &&
+    profile.skills.length === 0;
+
+  const showPrompt = isNewUser && !dismissedPrompt;
 
   const index = SECTIONS.findIndex((entry) => entry.id === section);
   const current = SECTIONS[index] || SECTIONS[0];
@@ -99,6 +117,14 @@ export function ProfileEditor({
           actions={
             <div className="flex items-center gap-3">
               <SavedIndicator status={saves.status} savedAt={saves.savedAt} />
+              <Button
+                variant="secondary"
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-1.5 cursor-pointer"
+              >
+                <UploadCloud className="size-3.5 text-primary" />
+                <span>Import CV</span>
+              </Button>
               {onNavigateToResume ? (
                 <Button variant="primary" onClick={onNavigateToResume}>
                   See base resume →
@@ -111,6 +137,46 @@ export function ProfileEditor({
             </div>
           }
         />
+
+        {showPrompt && (
+          <div className="mx-8 mt-4 rounded-card border border-primary/30 bg-primary/5 p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="flex size-10 items-center justify-center rounded-control bg-primary/10 text-primary shrink-0">
+                  <Sparkles className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-ink">Import data from your existing CV</h3>
+                  <p className="text-sm text-muted">
+                    Welcome! Upload your existing CV or resume (PDF, Word, or text) to automatically fill in your profile, projects, and skills. You'll be able to review and edit everything before saving.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <Button
+                  variant="primary"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer font-semibold shadow-cta"
+                >
+                  <UploadCloud className="size-4" />
+                  <span>Import from CV</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setDismissedPrompt(true);
+                    try {
+                      localStorage.setItem("dismissed_cv_prompt", "true");
+                    } catch {}
+                  }}
+                  className="cursor-pointer"
+                >
+                  Start from scratch
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-1 flex-row items-start justify-center gap-x-12 gap-y-10 px-8 pt-4 pb-24 max-w-[1240px] mx-auto w-full">
           {/* Left Column: Strength meter & Section Nav */}
@@ -168,6 +234,19 @@ export function ProfileEditor({
             </div>
           </section>
         </div>
+
+        <CvImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportSuccess={(imported) => {
+            handleUpdate(imported);
+            setDismissedPrompt(true);
+            try {
+              localStorage.setItem("dismissed_cv_prompt", "true");
+            } catch {}
+          }}
+          currentProfile={profile}
+        />
       </div>
     </TrackSaveContext>
   );
