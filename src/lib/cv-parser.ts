@@ -1,4 +1,4 @@
-import { extractText } from "unpdf";
+import { extractText, extractLinks, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
 import { LanguageLevel } from "@/lib/enums";
 import type {
@@ -19,7 +19,8 @@ import {
 } from "@/lib/ai-agent";
 
 /**
- * Extracts plain text from an uploaded CV file buffer (PDF, DOCX, TXT, MD, JSON).
+ * Extracts plain text along with embedded hyperlinks from an uploaded CV file buffer.
+ * Supports PDF (with link annotations), DOCX (Word), TXT, MD, and JSON Resume.
  */
 export async function extractCvTextFromFile(
   buffer: Buffer,
@@ -28,26 +29,42 @@ export async function extractCvTextFromFile(
 ): Promise<string> {
   const lowerName = fileName.toLowerCase();
 
-  // 1. PDF
+  // 1. PDF with embedded hyperlink extraction
   if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
     try {
-      const { text } = await extractText(new Uint8Array(buffer));
-      return Array.isArray(text) ? text.join("\n\n") : String(text || "");
+      return await extractPdfTextWithLinks(new Uint8Array(buffer));
     } catch (err: any) {
-      console.warn("unpdf text extraction failed:", err);
-      throw new Error(`Failed to read PDF file: ${err.message || "Unknown error"}`);
+      console.warn("Detailed PDF extraction failed, attempting simple extractText:", err);
+      try {
+        const { text } = await extractText(new Uint8Array(buffer));
+        const { links } = await extractLinks(new Uint8Array(buffer));
+        let baseText = Array.isArray(text) ? text.join("\n\n") : String(text || "");
+        if (links && links.length > 0) {
+          baseText +=
+            "\n\n--- DETECTED PDF HYPERLINKS ---\n" +
+            links.map((l) => `- ${l}`).join("\n");
+        }
+        return baseText;
+      } catch (innerErr: any) {
+        throw new Error(`Failed to read PDF file: ${innerErr.message || "Unknown error"}`);
+      }
     }
   }
 
-  // 2. Word (.docx)
+  // 2. Word (.docx) with markdown hyperlink extraction
   if (
     mimeType.includes("word") ||
     mimeType.includes("officedocument") ||
     lowerName.endsWith(".docx")
   ) {
     try {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value || "";
+      // convertToMarkdown preserves [Anchor Text](https://...) from Word documents
+      const mdResult = await (mammoth as any).convertToMarkdown({ buffer });
+      if (mdResult.value && mdResult.value.trim().length > 20) {
+        return mdResult.value;
+      }
+      const rawResult = await mammoth.extractRawText({ buffer });
+      return rawResult.value || "";
     } catch (err: any) {
       console.warn("mammoth docx text extraction failed:", err);
       throw new Error(`Failed to read Word document: ${err.message || "Unknown error"}`);
@@ -56,6 +73,163 @@ export async function extractCvTextFromFile(
 
   // 3. JSON or plain text / markdown
   return buffer.toString("utf-8");
+}
+
+/**
+ * Extracts text from a PDF buffer while mapping link annotations to the overlapping text,
+ * inlining them as markdown `[Text](url)` and compiling a list of all discovered URLs.
+ */
+async function extractPdfTextWithLinks(pdfData: Uint8Array): Promise<string> {
+  const discoveredLinks = new Set<string>();
+  let coordinateText = "";
+
+  try {
+    const pdf = await getDocumentProxy(pdfData);
+    const pageTexts: string[] = [];
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const [textContent, annotations] = await Promise.all([
+        page.getTextContent(),
+        page.getAnnotations(),
+      ]);
+
+      // Collect link annotations with their destination URLs and bounding rects
+      const linkAnnotations = (annotations || [])
+        .filter((a: any) => a.subtype === "Link" && a.url)
+        .map((a: any) => {
+          const url = String(a.url).trim();
+          discoveredLinks.add(url);
+          return {
+            url,
+            rect: a.rect as [number, number, number, number],
+          };
+        });
+
+      // Helper to check if text coordinate overlaps with a link annotation rect
+      const findLinkForCoord = (x: number, y: number) => {
+        return linkAnnotations.find(({ rect }) => {
+          if (!rect || rect.length < 4) return false;
+          const minX = Math.min(rect[0], rect[2]) - 4;
+          const maxX = Math.max(rect[0], rect[2]) + 4;
+          const minY = Math.min(rect[1], rect[3]) - 4;
+          const maxY = Math.max(rect[1], rect[3]) + 4;
+          return x >= minX && x <= maxX && y >= minY && y <= maxY;
+        });
+      };
+
+      const items = (textContent?.items || []) as any[];
+      let currentLineY: number | null = null;
+      const pageLines: string[] = [];
+      let currentLineTokens: string[] = [];
+
+      for (const item of items) {
+        if (!item.str) continue;
+        const tx = item.transform?.[4] ?? 0;
+        const ty = item.transform?.[5] ?? 0;
+
+        if (currentLineY === null || Math.abs(ty - currentLineY) > 5) {
+          if (currentLineTokens.length > 0) {
+            pageLines.push(currentLineTokens.join(" "));
+            currentLineTokens = [];
+          }
+          currentLineY = ty;
+        }
+
+        const link = findLinkForCoord(tx, ty);
+        if (
+          link &&
+          !item.str.includes(link.url) &&
+          !link.url.startsWith("mailto:" + item.str) &&
+          item.str.trim().length > 1
+        ) {
+          currentLineTokens.push(`[${item.str}](${link.url})`);
+        } else {
+          currentLineTokens.push(item.str);
+        }
+      }
+
+      if (currentLineTokens.length > 0) {
+        pageLines.push(currentLineTokens.join(" "));
+      }
+
+      pageTexts.push(pageLines.join("\n"));
+    }
+
+    coordinateText = pageTexts.join("\n\n");
+  } catch (err) {
+    console.warn("Detailed PDF coordinate link extraction error:", err);
+  }
+
+  // Fallback or verify with extractText
+  let baseText = coordinateText.trim();
+  if (baseText.length < 30) {
+    try {
+      const { text } = await extractText(pdfData);
+      baseText = Array.isArray(text) ? text.join("\n\n") : String(text || "");
+    } catch {}
+  }
+
+  // Ensure all links from unpdf extractLinks are also collected
+  try {
+    const { links } = await extractLinks(pdfData);
+    for (const l of links || []) {
+      if (l) discoveredLinks.add(String(l).trim());
+    }
+  } catch {}
+
+  // Append explicit section with all detected links
+  if (discoveredLinks.size > 0) {
+    baseText +=
+      "\n\n--- DETECTED PDF HYPERLINKS ---\n" +
+      Array.from(discoveredLinks)
+        .map((link) => `- ${link}`)
+        .join("\n");
+  }
+
+  return baseText;
+}
+
+/**
+ * Extracts all URLs from text, markdown links, or the detected hyperlinks section.
+ */
+function extractAllUrlsFromText(text: string): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (u: string) => {
+    let clean = u.replace(/[,\.\)\]'"]+$/, "").trim();
+    if (clean && (clean.startsWith("http://") || clean.startsWith("https://"))) {
+      if (!seen.has(clean.toLowerCase())) {
+        seen.add(clean.toLowerCase());
+        urls.push(clean);
+      }
+    }
+  };
+
+  // 1. Markdown links: [text](url)
+  const mdRegex = /\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/g;
+  let mdMatch;
+  while ((mdMatch = mdRegex.exec(text)) !== null) {
+    add(mdMatch[2]);
+  }
+
+  // 2. Detected hyperlinks section (- url)
+  const detectedSection = text.split("--- DETECTED PDF HYPERLINKS ---")[1] || "";
+  const listRegex = /^[*-]\s+(https?:\/\/[^\s]+)/gm;
+  let listMatch;
+  while ((listMatch = listRegex.exec(detectedSection)) !== null) {
+    add(listMatch[1]);
+  }
+
+  // 3. Any raw URLs
+  const urlRegex = /(https?:\/\/[a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,}[^\s\)\],"'<>]*)/g;
+  let urlMatch;
+  while ((urlMatch = urlRegex.exec(text)) !== null) {
+    add(urlMatch[1]);
+  }
+
+  return urls;
 }
 
 /**
@@ -74,7 +248,7 @@ export async function parseCvToProfile(
   if (cleanText.startsWith("{")) {
     try {
       const directJson = JSON.parse(cleanText);
-      const mapped = mapJsonResumeToProfile(directJson);
+      const mapped = mapJsonResumeToProfile(directJson, cleanText);
       if (mapped) return mapped;
     } catch {
       // Continue to AI parsing
@@ -107,6 +281,15 @@ async function callAiParser(cvText: string): Promise<ProfileData | null> {
 
   const prompt = `You are an expert resume parsing engine.
 Parse the following raw CV/Resume text into structured profile JSON. Extract every experience, project, skill, education, language, and certification accurately.
+
+CRITICAL HYPERLINK RULES:
+- Inspect all markdown hyperlinks (e.g. [Project Alpha](https://github.com/...) or [Portfolio](https://...)) AND any URLs listed under '--- DETECTED PDF HYPERLINKS ---'.
+- Candidate's LinkedIn profile URL -> basics.linkedin
+- Candidate's personal portfolio / website / GitHub profile -> basics.website
+- Project repositories or live demo URLs -> projects[i].link (Match each project with its repository, demo, or GitHub link)
+- Certification verification or Credly links -> certifications[i].link
+- mailto: links -> basics.email
+- Never omit project links or profile links if they are present anywhere in the document.
 
 Candidate CV Text:
 """
@@ -147,7 +330,7 @@ Output strictly valid JSON matching this exact structure:
   "projects": [
     {
       "name": "Project Name",
-      "link": "https://github.com/... or project link",
+      "link": "https://github.com/... or live demo link",
       "startMonth": 1,
       "startYear": 2023,
       "endMonth": null,
@@ -181,7 +364,7 @@ Output strictly valid JSON matching this exact structure:
   "languages": [
     {
       "name": "Language Name",
-      "level": "NATIVE" // Choose one: NATIVE, C2, C1, B2, B1, A2, A1
+      "level": "NATIVE"
     }
   ]
 }`;
@@ -232,17 +415,18 @@ Output strictly valid JSON matching this exact structure:
     const parsed = parseJsonResiliently(content);
     if (!parsed) return null;
 
-    return formatParsedJsonToProfile(parsed);
+    return formatParsedJsonToProfile(parsed, cvText);
   } catch (err) {
     clearTimeout(timeout);
     throw err;
   }
 }
 
-// ─── JSON to ProfileData Normalization ────────────────────────────────────────
+// ─── JSON to ProfileData Normalization with Smart Link Resolution ─────────────
 
-function formatParsedJsonToProfile(data: any): ProfileData {
+function formatParsedJsonToProfile(data: any, rawCvText: string = ""): ProfileData {
   const profile = createEmptyProfile();
+  const allUrls = extractAllUrlsFromText(rawCvText);
 
   // 1. Basics
   if (data.basics && typeof data.basics === "object") {
@@ -262,8 +446,29 @@ function formatParsedJsonToProfile(data: any): ProfileData {
     };
   }
 
+  // Smart Link Matching for Basics:
+  if (!profile.basics.linkedin) {
+    const li = allUrls.find((u) => u.includes("linkedin.com/in/"));
+    if (li) profile.basics.linkedin = li;
+  }
+
+  if (!profile.basics.website) {
+    const web = allUrls.find(
+      (u) =>
+        !u.includes("linkedin.com") &&
+        !u.includes("credly.com") &&
+        (u.includes("github.io") ||
+          u.includes(".dev") ||
+          u.includes(".me") ||
+          u.includes("portfolio") ||
+          u.includes("vercel.app") ||
+          /^https?:\/\/(?:www\.)?github\.com\/[a-zA-Z0-9_-]+\/?$/.test(u))
+    );
+    if (web) profile.basics.website = web;
+  }
+
   // 2. Skills Map
-  const skillMap = new Map<string, string>(); // lowercase name -> skill.id
+  const skillMap = new Map<string, string>();
   if (Array.isArray(data.skills)) {
     data.skills.forEach((s: any, idx: number) => {
       const name = String(s.name || s || "").trim();
@@ -281,7 +486,6 @@ function formatParsedJsonToProfile(data: any): ProfileData {
     });
   }
 
-  // Helper to map skill names to IDs (and add if missing)
   const getOrCreateSkillIds = (names: any[]): string[] => {
     if (!Array.isArray(names)) return [];
     const ids: string[] = [];
@@ -324,17 +528,45 @@ function formatParsedJsonToProfile(data: any): ProfileData {
     });
   }
 
-  // 4. Projects
+  // 4. Projects with Link Resolution
+  const projectUrls = allUrls.filter(
+    (u) =>
+      u !== profile.basics.linkedin &&
+      u !== profile.basics.website &&
+      !u.includes("linkedin.com") &&
+      !u.includes("credly.com")
+  );
+
   if (Array.isArray(data.projects)) {
     profile.projects = data.projects.map((p: any, idx: number): ProjectItem => {
       const bullets = Array.isArray(p.bullets)
         ? p.bullets.filter(Boolean).join("\n")
         : String(p.bullets || "").trim();
 
+      let link = String(p.link || "").trim();
+
+      // If link is empty, match with available extracted project/GitHub URLs
+      if (!link && projectUrls.length > 0) {
+        const nameTokens = String(p.name || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .split(" ")
+          .filter((t) => t.length > 2);
+
+        const matched = projectUrls.find((u) => {
+          const lowerUrl = u.toLowerCase();
+          return nameTokens.some((token) => lowerUrl.includes(token));
+        });
+
+        if (matched) {
+          link = matched;
+        }
+      }
+
       return {
         id: `proj-${idx + 1}-${Date.now().toString(36)}`,
         name: String(p.name || "").trim(),
-        link: String(p.link || "").trim(),
+        link,
         startMonth: typeof p.startMonth === "number" ? p.startMonth : null,
         startYear: typeof p.startYear === "number" ? p.startYear : null,
         endMonth: typeof p.endMonth === "number" ? p.endMonth : null,
@@ -364,15 +596,23 @@ function formatParsedJsonToProfile(data: any): ProfileData {
     });
   }
 
-  // 6. Certifications
+  // 6. Certifications with Link Resolution
   if (Array.isArray(data.certifications)) {
     profile.certifications = data.certifications.map((c: any, idx: number): CertificationItem => {
+      let link = String(c.link || "").trim();
+      if (!link) {
+        const certUrl = allUrls.find(
+          (u) => u.includes("credly.com") || u.includes("verify") || u.includes("certificate")
+        );
+        if (certUrl) link = certUrl;
+      }
+
       return {
         id: `cert-${idx + 1}-${Date.now().toString(36)}`,
         name: String(c.name || "").trim(),
         issuer: String(c.issuer || "").trim(),
         issueDate: String(c.issueDate || "").trim(),
-        link: String(c.link || "").trim(),
+        link,
         onResumes: true,
       };
     });
@@ -400,15 +640,13 @@ function formatParsedJsonToProfile(data: any): ProfileData {
 
 // ─── JSON Resume Format Mapper ───────────────────────────────────────────────
 
-function mapJsonResumeToProfile(json: any): ProfileData | null {
+function mapJsonResumeToProfile(json: any, rawText: string = ""): ProfileData | null {
   if (!json || typeof json !== "object") return null;
 
-  // Check if it's already a ProfileData object
   if (json.basics && (Array.isArray(json.experience) || Array.isArray(json.skills))) {
-    return formatParsedJsonToProfile(json);
+    return formatParsedJsonToProfile(json, rawText);
   }
 
-  // Standard JSON Resume schema support (jsonresume.org)
   if (json.basics && (json.work || json.education || json.skills)) {
     const adapted: any = {
       basics: {
@@ -453,35 +691,48 @@ function mapJsonResumeToProfile(json: any): ProfileData | null {
         level: LanguageLevel.C1,
       })),
     };
-    return formatParsedJsonToProfile(adapted);
+    return formatParsedJsonToProfile(adapted, rawText);
   }
 
   return null;
 }
 
-// ─── Fallback Heuristic CV Parser ────────────────────────────────────────────
+// ─── Fallback Heuristic CV Parser with Link Detection ────────────────────────
 
 export function heuristicCvParser(text: string, baseProfile?: ProfileData): ProfileData {
   const profile = baseProfile ? { ...baseProfile } : createEmptyProfile();
+  const allUrls = extractAllUrlsFromText(text);
+
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // 1. Contact information regexes
+  // 1. Contact & Link extraction
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) profile.basics.email = emailMatch[0];
 
   const phoneMatch = text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
   if (phoneMatch) profile.basics.phone = phoneMatch[0];
 
-  const linkedinMatch = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i);
-  if (linkedinMatch) profile.basics.linkedin = linkedinMatch[0];
+  const linkedinUrl = allUrls.find((u) => u.includes("linkedin.com/in/"));
+  if (linkedinUrl) profile.basics.linkedin = linkedinUrl;
 
-  const githubMatch = text.match(/https?:\/\/(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i);
-  if (githubMatch && !profile.basics.website) profile.basics.website = githubMatch[0];
+  const websiteUrl = allUrls.find(
+    (u) =>
+      u !== linkedinUrl &&
+      !u.includes("linkedin.com") &&
+      !u.includes("credly.com") &&
+      (u.includes("github.io") ||
+        u.includes(".dev") ||
+        u.includes(".me") ||
+        u.includes("portfolio") ||
+        u.includes("vercel.app") ||
+        /^https?:\/\/(?:www\.)?github\.com\/[a-zA-Z0-9_-]+\/?$/.test(u))
+  );
+  if (websiteUrl) profile.basics.website = websiteUrl;
 
-  // 2. Name extraction: usually first line without an @ or URL
+  // 2. Name extraction
   for (const line of lines.slice(0, 5)) {
     if (
       line.length > 2 &&
@@ -490,7 +741,7 @@ export function heuristicCvParser(text: string, baseProfile?: ProfileData): Prof
       !line.includes("http") &&
       !/resume|curriculum|cv|page/i.test(line)
     ) {
-      profile.basics.name = line;
+      profile.basics.name = line.replace(/\[.*?\]/g, "").trim();
       break;
     }
   }
@@ -518,6 +769,9 @@ export function heuristicCvParser(text: string, baseProfile?: ProfileData): Prof
   ];
 
   for (const line of lines) {
+    if (line.startsWith("--- DETECTED PDF HYPERLINKS ---")) {
+      break;
+    }
     let matchedHeader = false;
     for (const h of sectionHeaders) {
       if (h.regex.test(line) && line.length < 40) {
@@ -622,7 +876,72 @@ export function heuristicCvParser(text: string, baseProfile?: ProfileData): Prof
     }
   }
 
-  // 7. Education items
+  // 7. Projects with Link Extraction
+  if (sectionContent.projects.length > 0) {
+    const projLines = sectionContent.projects;
+    let currentProj: Partial<ProjectItem> | null = null;
+    let projBullets: string[] = [];
+
+    for (const line of projLines) {
+      const isBullet = /^[-*•·]/.test(line);
+      const mdLinkMatch = line.match(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/);
+      const rawUrlMatch = line.match(/(https?:\/\/[^\s\)]+)/);
+
+      if (!isBullet && line.length < 80 && (mdLinkMatch || !currentProj)) {
+        if (currentProj && currentProj.name) {
+          profile.projects.push({
+            id: `proj-${profile.projects.length + 1}`,
+            name: currentProj.name,
+            link: currentProj.link || "",
+            bullets: projBullets.join("\n"),
+            startYear: null,
+            startMonth: null,
+            endYear: null,
+            endMonth: null,
+            current: false,
+            skillIds: [],
+          });
+          projBullets = [];
+        }
+
+        let name = line;
+        let link = "";
+        if (mdLinkMatch) {
+          name = mdLinkMatch[1];
+          link = mdLinkMatch[2];
+        } else if (rawUrlMatch) {
+          link = rawUrlMatch[1];
+          name = line.replace(rawUrlMatch[1], "").replace(/[-|·]/g, "").trim();
+        }
+
+        currentProj = {
+          name: name.trim() || "Project",
+          link,
+        };
+      } else if (isBullet) {
+        projBullets.push(line.replace(/^[-*•·\s]+/, "").trim());
+      } else if (rawUrlMatch && currentProj && !currentProj.link) {
+        currentProj.link = rawUrlMatch[1];
+      }
+    }
+
+    if (currentProj && currentProj.name) {
+      profile.projects.push({
+        id: `proj-${profile.projects.length + 1}`,
+        name: currentProj.name,
+        link: currentProj.link || "",
+        bullets: projBullets.join("\n"),
+        startYear: null,
+        startMonth: null,
+        endYear: null,
+        endMonth: null,
+        current: false,
+        skillIds: [],
+      });
+    }
+  }
+
+  // 8. Education items
   if (sectionContent.education.length > 0) {
     const eduLines = sectionContent.education;
     let school = "";
@@ -651,6 +970,34 @@ export function heuristicCvParser(text: string, baseProfile?: ProfileData): Prof
     }
   }
 
+  // Final Link matching for projects that don't have links
+  const availableProjectUrls = allUrls.filter(
+    (u) =>
+      u !== profile.basics.linkedin &&
+      u !== profile.basics.website &&
+      !u.includes("linkedin.com") &&
+      !u.includes("credly.com")
+  );
+
+  profile.projects.forEach((p) => {
+    if (!p.link && availableProjectUrls.length > 0) {
+      const nameTokens = p.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(" ")
+        .filter((t) => t.length > 2);
+
+      const matched = availableProjectUrls.find((u) => {
+        const lowerUrl = u.toLowerCase();
+        return nameTokens.some((token) => lowerUrl.includes(token));
+      });
+
+      if (matched) {
+        p.link = matched;
+      }
+    }
+  });
+
   return profile;
 }
 
@@ -669,4 +1016,3 @@ function parseJsonResiliently(str: string): any {
   }
   return null;
 }
-
