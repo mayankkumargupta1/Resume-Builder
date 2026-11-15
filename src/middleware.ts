@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 export const SESSION_COOKIE_NAME = "rp_session";
 
-const PROTECTED_PREFIXES = ["/resume", "/profile", "/tailor", "/print"];
+const PROTECTED_PREFIXES = ["/resume", "/profile", "/tailor", "/applications", "/print"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -22,7 +22,13 @@ export function middleware(request: NextRequest) {
   }
 
   // If already authenticated and visiting login or signup page, redirect to resume workspace
+  // unless explicitly routed with a "from" query parameter (e.g. redirected from an invalid/expired session)
   if ((pathname === "/login" || pathname === "/signup") && token) {
+    if (request.nextUrl.searchParams.has("from")) {
+      const response = NextResponse.next();
+      response.cookies.delete(SESSION_COOKIE_NAME);
+      return response;
+    }
     return NextResponse.redirect(new URL("/resume", request.url));
   }
 

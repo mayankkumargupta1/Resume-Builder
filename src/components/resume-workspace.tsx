@@ -15,7 +15,7 @@ import type { ProfileData } from "@/lib/profile";
 import { saveFile } from "@/lib/save-file";
 import { pagesInWords } from "@/lib/settings";
 import { parseThemeFile, themeFile, themeFileName } from "@/lib/theme-file";
-import { PAPER_SIZES, type ThemeData } from "@/lib/themes";
+import { PAPER_SIZES, printCss, type ThemeData } from "@/lib/themes";
 import { deleteTheme, duplicateTheme, importTheme, saveTheme, setBaseTheme } from "@/components/themes/actions";
 import { draftFrom, ThemeBuilder, type ThemeDraft } from "@/components/themes/theme-builder";
 import { ThemePicker } from "@/components/themes/theme-picker";
@@ -400,7 +400,8 @@ export function ResumeWorkspace({
         }
       />
 
-      <div className="@container flex flex-1 flex-wrap border-t border-line overflow-hidden">
+      <div className="@container flex flex-1 flex-wrap border-t border-line overflow-hidden print:overflow-visible print:border-none print:block">
+        <style>{printCss(theme, paper)}</style>
         <DocumentPreview
           label={theme.name}
           meta={(pages) => `${PAPER_SIZES[paper].label} · ${pages} ${pages === 1 ? "page" : "pages"}`}
@@ -442,7 +443,7 @@ export function ResumeWorkspace({
         <aside
           ref={panelArea}
           aria-label="Theme"
-          className="flex flex-[1_0_340px] max-w-[420px] flex-col border-t border-line bg-paper px-7 pt-7 pb-12 overflow-y-auto @min-[780px]:border-t-0 @min-[780px]:border-l"
+          className="flex flex-[1_0_340px] max-w-[420px] flex-col border-t border-line bg-paper px-7 pt-7 pb-12 overflow-y-auto @min-[780px]:border-t-0 @min-[780px]:border-l no-print"
         >
           <Tabs value={panel} onValueChange={(value) => openPanel(value as Panel)} className="flex flex-col gap-6">
             <TabsList variant="segmented">

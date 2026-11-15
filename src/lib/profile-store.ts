@@ -64,7 +64,7 @@ export async function getAuthenticatedUserIdForPage(): Promise<string> {
   }
   const user = await getUserFromSession(token);
   if (!user) {
-    redirect("/login");
+    redirect("/login?from=expired");
   }
   return user.id;
 }

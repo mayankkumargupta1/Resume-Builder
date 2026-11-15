@@ -226,4 +226,15 @@
   .no-print {
     display: none !important;
   }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  main {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
 }

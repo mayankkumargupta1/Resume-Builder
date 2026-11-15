@@ -204,42 +204,36 @@ export function resumeContent(
   if (units) {
     // A tailored resume only customizes the profile headline and summary;
     // all skills, experiences, projects, education, and certifications remain 100% present and authentic.
-    const text = (id: string) => units.find((unit) => unit.id === id)?.text ?? "";
-    const withUnit = <T extends { id: string }>(prefix: string, entries: T[]) =>
-      units.flatMap((unit) => {
-        if (!unit.id.startsWith(prefix)) return [];
-        const entry = entries.find(({ id }) => `${prefix}${id}` === unit.id);
-        return entry ? [{ entry, text: unit.text }] : [];
-      });
+    const text = (id: string) => units.find((unit) => unit.id === id)?.text;
 
-    if (text("headline").trim()) {
-      content.headline = text("headline").trim();
+    const headlineText = text("headline");
+    if (headlineText && headlineText.trim()) {
+      content.headline = headlineText.trim();
     }
-    if (text("summary").trim()) {
-      content.summary = text("summary").trim();
+    const summaryText = text("summary");
+    if (summaryText && summaryText.trim()) {
+      content.summary = summaryText.trim();
     }
 
     // All skills are always present - never hidden or stripped
     content.skills = skillsText(inEditorOrder(profile.skills));
-    content.languages = text("languages").trim() || languagesLine(profile.languages, labels);
+    const langText = text("languages");
+    content.languages = (langText && langText.trim()) ? langText.trim() : languagesLine(profile.languages, labels);
 
-    const tailoredExp = withUnit("experience:", profile.experience);
-    content.experience =
-      tailoredExp.length > 0
-        ? tailoredExp.map(({ entry, text }) => experience(entry, text))
-        : profile.experience.map((entry) => experience(entry, entry.bullets));
+    content.experience = profile.experience.map((entry) => {
+      const tailored = text(`experience:${entry.id}`);
+      return experience(entry, tailored !== undefined ? tailored : entry.bullets);
+    });
 
-    const tailoredProj = withUnit("project:", profile.projects);
-    content.projects =
-      tailoredProj.length > 0
-        ? tailoredProj.map(({ entry, text }) => project(entry, text))
-        : profile.projects.map((entry) => project(entry, entry.bullets));
+    content.projects = profile.projects.map((entry) => {
+      const tailored = text(`project:${entry.id}`);
+      return project(entry, tailored !== undefined ? tailored : entry.bullets);
+    });
 
-    const tailoredEdu = withUnit("education:", profile.education);
-    content.education =
-      tailoredEdu.length > 0
-        ? tailoredEdu.map(({ entry, text }) => education(entry, text))
-        : profile.education.map((entry) => education(entry, entry.notes));
+    content.education = profile.education.map((entry) => {
+      const tailored = text(`education:${entry.id}`);
+      return education(entry, tailored !== undefined ? tailored : entry.notes);
+    });
 
     // Certifications remain authentic and present across all tailored resumes
     content.certifications = renderedCerts;

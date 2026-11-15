@@ -42,6 +42,12 @@ export function ProfileEditor({
     setProfile(initial);
   }, [initial]);
 
+  useEffect(() => {
+    if (initialSection) {
+      setSection(initialSection);
+    }
+  }, [initialSection]);
+
   const handleUpdate = (updater: ProfileData | ((prev: ProfileData) => ProfileData)) => {
     setProfile((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;

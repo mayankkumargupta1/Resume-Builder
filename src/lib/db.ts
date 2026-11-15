@@ -147,7 +147,8 @@ async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promi
 }
 
 // ─── Serialization & Row Mapping Helpers ──────────────────────────────────────
-function stripNullBytes(value: string): string {
+function stripNullBytes(value: unknown): string {
+  if (typeof value !== "string") return "";
   return value.includes("\u0000") ? value.replace(/\u0000/g, "") : value;
 }
 

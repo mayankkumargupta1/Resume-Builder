@@ -103,16 +103,16 @@ export function DocumentPreview({
   return (
     <div
       className={cn(
-        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-10 pt-10 pb-16",
+        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-10 pt-10 pb-16 print:p-0 print:bg-transparent print:overflow-visible print:block",
         className,
       )}
     >
-      <div className="flex flex-col gap-4" style={{ "--u": "min(1px, calc(100cqw / 640))" } as CSSProperties}>
-        <div className="flex w-[calc(var(--u)*640)] justify-between gap-3 text-meta text-muted">
+      <div className="flex flex-col gap-4 print:gap-0" style={{ "--u": "min(1px, calc(100cqw / 640))" } as CSSProperties}>
+        <div className="flex w-[calc(var(--u)*640)] justify-between gap-3 text-meta text-muted no-print">
           <span>{label}</span>
           <span>{typeof meta === "function" ? meta(pages) : meta}</span>
         </div>
-        {notice && <div className="w-[calc(var(--u)*640)]">{typeof notice === "function" ? notice(pages) : notice}</div>}
+        {notice && <div className="w-[calc(var(--u)*640)] no-print">{typeof notice === "function" ? notice(pages) : notice}</div>}
         <div
           ref={pageRef}
           className={cn("relative isolate w-fit", paged ? styles.paged : "shadow-page")}
