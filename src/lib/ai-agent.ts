@@ -43,6 +43,7 @@ export interface TailoredResumeResult {
 export interface AnalyzeAndCurateOptions {
   profile: ProfileData;
   jobText: string;
+  jobAnalysis?: JobAnalysis;
   provider?: "gateway" | "deepseek" | "ollama" | "openai" | "anthropic";
   apiKey?: string;
   baseUrl?: string;
@@ -81,13 +82,14 @@ export async function curateResumeForJob(
   const {
     profile,
     jobText,
+    jobAnalysis,
     provider = "gateway",
     apiKey = DEFAULT_GATEWAY_KEY,
     baseUrl = DEFAULT_GATEWAY_URL,
     modelName = DEFAULT_MODEL,
   } = options;
 
-  const prompt = buildCurationPrompt(profile, jobText);
+  const prompt = buildCurationPrompt(profile, jobText, jobAnalysis);
   let rawJson: string | null = null;
 
   try {
@@ -124,14 +126,14 @@ export async function curateResumeForJob(
     try {
       const parsed = extractJson(rawJson);
       if (parsed && (parsed.analysis || parsed.curation || parsed.tailored)) {
-        return sanitizeAndVerify(parsed, profile, jobText);
+        return sanitizeAndVerify(parsed, profile, jobText, jobAnalysis);
       }
     } catch (parseError) {
       console.warn("Failed to parse LLM JSON, falling back to heuristic curation:", parseError);
     }
   }
 
-  return heuristicCuration(profile, jobText);
+  return heuristicCuration(profile, jobText, jobAnalysis);
 }
 
 export function ensureHealthySummaryLength(
@@ -177,7 +179,120 @@ export function ensureHealthySummaryLength(
   return clean;
 }
 
-function buildCurationPrompt(profile: ProfileData, jobText: string): string {
+export function heuristicAnalyzeJob(jobText: string): JobAnalysis {
+  let extractedTitle = "Software Developer";
+  const titlePatterns = [
+    /(?:job\s+title|role|position):\s*([^\n\r]+)/i,
+    /(?:senior|lead|principal|staff|full stack|backend|frontend|software|ai|data|systems|devops|cloud)\s+(?:engineer|developer|architect|specialist)[^\n\r,]*/i,
+  ];
+  for (const pat of titlePatterns) {
+    const match = jobText.match(pat);
+    if (match) {
+      extractedTitle = (match[1] || match[0]).trim();
+      break;
+    }
+  }
+
+  let extractedCompany = "Target Company";
+  const companyPatterns = [
+    /(?:company|organization|employer|client):\s*([^\n\r]+)/i,
+    /(?:at|join|about)\s+([A-Z][A-Za-z0-9&., ]+(?:Inc|LLC|Corp|Mobility|Technologies|Solutions|Group|Ltd)?)/,
+  ];
+  for (const pat of companyPatterns) {
+    const match = jobText.match(pat);
+    if (match && match[1]) {
+      const clean = match[1].trim().replace(/[.,;]$/, "");
+      if (clean.length > 2 && clean.length < 50 && !clean.toLowerCase().includes("our team")) {
+        extractedCompany = clean;
+        break;
+      }
+    }
+  }
+
+  return {
+    title: extractedTitle,
+    company: extractedCompany,
+    location: "Remote / On-site",
+    jobType: "Full-Time",
+    summary: "Target position requirements based on job description.",
+    requiredSkills: [],
+    keyResponsibilities: [],
+    extractedKeywords: [],
+  };
+}
+
+export async function analyzeJobPosting(
+  jobText: string,
+  options?: {
+    provider?: "deepseek" | "gateway" | "ollama" | "openai" | "anthropic";
+    apiKey?: string;
+    baseUrl?: string;
+    modelName?: string;
+  }
+): Promise<JobAnalysis> {
+  const provider = options?.provider || "gateway";
+  const apiKey = options?.apiKey || DEFAULT_GATEWAY_KEY;
+  const baseUrl = options?.baseUrl || DEFAULT_GATEWAY_URL;
+  const modelName = options?.modelName || DEFAULT_MODEL;
+
+  const prompt = `You are an expert ATS recruiter. Analyze this job description and extract the official target job title and hiring company name.
+
+### JOB POSTING:
+"""
+${jobText.slice(0, 15000)}
+"""
+
+### REQUIRED JSON FORMAT (raw JSON only, no markdown):
+{
+  "title": "Clean official target job title (max 50 chars, e.g. Software Developer - Train IT)",
+  "company": "Target company name (e.g. Siemens Mobility). If not mentioned, write 'Target Company'",
+  "location": "Location or Remote/Hybrid",
+  "jobType": "Full-time / Contract / etc",
+  "summary": "1-2 sentence overview of what the role requires",
+  "requiredSkills": ["Skill 1", "Skill 2"],
+  "extractedKeywords": ["keyword1", "keyword2"]
+}`;
+
+  let rawJson: string | null = null;
+  try {
+    if (provider === "deepseek" || provider === "gateway" || provider === "openai") {
+      rawJson = await callOpenAICompatible(prompt, apiKey, modelName, baseUrl, true);
+    } else if (provider === "ollama") {
+      rawJson = await callOllama(prompt, modelName || "gemma4:12b");
+    } else if (provider === "anthropic" && apiKey) {
+      rawJson = await callAnthropic(prompt, apiKey, modelName || "claude-3-5-sonnet-latest");
+    }
+  } catch (e) {
+    console.warn("LLM analyzeJobPosting failed, falling back to heuristic:", e);
+  }
+
+  if (rawJson) {
+    try {
+      const parsed = extractJson(rawJson);
+      const data = parsed?.analysis || parsed;
+      if (data && (data.title || data.company)) {
+        return {
+          title: (data.title || "Target Role").trim(),
+          company: (data.company || "Target Company").trim(),
+          location: data.location || "Remote / On-site",
+          jobType: data.jobType || "Full-time",
+          summary: data.summary || "",
+          requiredSkills: Array.isArray(data.requiredSkills) ? data.requiredSkills : [],
+          keyResponsibilities: Array.isArray(data.keyResponsibilities) ? data.keyResponsibilities : [],
+          extractedKeywords: Array.isArray(data.extractedKeywords) ? data.extractedKeywords : [],
+        };
+      }
+    } catch {}
+  }
+
+  return heuristicAnalyzeJob(jobText);
+}
+
+function buildCurationPrompt(
+  profile: ProfileData,
+  jobText: string,
+  jobAnalysis?: JobAnalysis
+): string {
   const experiencesJson = profile.experience.map((e) => ({
     role: e.role,
     company: e.company,
@@ -227,6 +342,15 @@ ${JSON.stringify(experiencesJson, null, 2)}
 Candidate Projects (all preserved verbatim):
 ${JSON.stringify(projectsJson, null, 2)}
 
+${
+  jobAnalysis
+    ? `### CANONICAL TARGET ROLE & COMPANY (PRE-ALIGNED):
+Role Title: ${jobAnalysis.title}
+Company: ${jobAnalysis.company}
+Location: ${jobAnalysis.location}
+`
+    : ""
+}
 ### TARGET JOB POSTING:
 """
 ${jobText.slice(0, 15000)}
@@ -236,10 +360,10 @@ ${jobText.slice(0, 15000)}
 Respond with ONLY valid JSON (no markdown formatting, no code block fences, only raw JSON):
 {
   "analysis": {
-    "title": "Clean target job title (max 50 chars)",
-    "company": "Target company name",
-    "location": "Location or Remote/Hybrid",
-    "jobType": "Full-time / Contract / etc",
+    "title": "${jobAnalysis?.title ? jobAnalysis.title.replace(/"/g, '\\"') : "Clean target job title (max 50 chars)"}",
+    "company": "${jobAnalysis?.company ? jobAnalysis.company.replace(/"/g, '\\"') : "Target company name"}",
+    "location": "${jobAnalysis?.location || "Location or Remote/Hybrid"}",
+    "jobType": "${jobAnalysis?.jobType || "Full-time / Contract / etc"}",
     "summary": "1-2 sentence overview of what the role requires",
     "requiredSkills": ["Skill 1", "Skill 2", "Skill 3"],
     "extractedKeywords": ["keyword1", "keyword2", "keyword3"]
@@ -441,7 +565,8 @@ function extractJson(str: string): any {
 function sanitizeAndVerify(
   parsed: any,
   profile: ProfileData,
-  jobText: string
+  jobText: string,
+  jobAnalysis?: JobAnalysis
 ): { analysis: JobAnalysis; tailored: TailoredResumeResult } {
   const analysisData = parsed.analysis || {};
   const curationData = parsed.curation || parsed.tailored || {};
@@ -511,18 +636,24 @@ function sanitizeAndVerify(
   };
 
   const analysis: JobAnalysis = {
-    title: analysisData.title || "Target Role",
-    company: analysisData.company || "Target Company",
-    location: analysisData.location || "Remote / On-site",
-    jobType: analysisData.jobType || "Full-Time",
-    summary: analysisData.summary || "",
-    requiredSkills: Array.isArray(analysisData.requiredSkills) ? analysisData.requiredSkills : [],
-    keyResponsibilities: Array.isArray(analysisData.keyResponsibilities)
+    title: jobAnalysis?.title || analysisData.title || "Target Role",
+    company: jobAnalysis?.company || analysisData.company || "Target Company",
+    location: jobAnalysis?.location || analysisData.location || "Remote / On-site",
+    jobType: jobAnalysis?.jobType || analysisData.jobType || "Full-Time",
+    summary: jobAnalysis?.summary || analysisData.summary || "",
+    requiredSkills: jobAnalysis?.requiredSkills?.length
+      ? jobAnalysis.requiredSkills
+      : (Array.isArray(analysisData.requiredSkills) ? analysisData.requiredSkills : []),
+    keyResponsibilities: jobAnalysis?.keyResponsibilities?.length
+      ? jobAnalysis.keyResponsibilities
+      : (Array.isArray(analysisData.keyResponsibilities)
       ? analysisData.keyResponsibilities
-      : [],
-    extractedKeywords: Array.isArray(analysisData.extractedKeywords)
+      : []),
+    extractedKeywords: jobAnalysis?.extractedKeywords?.length
+      ? jobAnalysis.extractedKeywords
+      : (Array.isArray(analysisData.extractedKeywords)
       ? analysisData.extractedKeywords
-      : [],
+      : []),
   };
 
   // 7. Industry ATS Compatibility Audit
@@ -558,20 +689,12 @@ function sanitizeAndVerify(
 
 function heuristicCuration(
   profile: ProfileData,
-  jobText: string
+  jobText: string,
+  jobAnalysis?: JobAnalysis
 ): { analysis: JobAnalysis; tailored: TailoredResumeResult } {
-  let extractedTitle = "Software Developer and AI Engineer";
-  const titlePatterns = [
-    /(?:title|role|position):\s*([^\n\r]+)/i,
-    /(?:senior|lead|principal|staff|full stack|backend|frontend|software|ai|data|systems)\s+(?:engineer|developer|architect)/i,
-  ];
-  for (const pat of titlePatterns) {
-    const match = jobText.match(pat);
-    if (match) {
-      extractedTitle = match[0].trim();
-      break;
-    }
-  }
+  const shared = jobAnalysis || heuristicAnalyzeJob(jobText);
+  let extractedTitle = shared.title || "Software Developer";
+  let extractedCompany = shared.company || "Target Company";
 
   const selectedSkills = profile.skills.map((s) => s.name);
   const selectedExperienceIds = profile.experience.map((e) => e.id);
@@ -620,13 +743,13 @@ function heuristicCuration(
 
   const analysis: JobAnalysis = {
     title: extractedTitle,
-    company: "Target Company",
-    location: "Identified in listing",
-    jobType: "Full-Time",
-    summary: "Curated profile description aligned with target job listing while preserving 100% of authentic career history.",
-    requiredSkills: selectedSkills.slice(0, 8),
-    keyResponsibilities: ["Key role requirements identified and matched from candidate profile."],
-    extractedKeywords: selectedSkills.slice(0, 10),
+    company: extractedCompany,
+    location: shared.location || "Identified in listing",
+    jobType: shared.jobType || "Full-Time",
+    summary: shared.summary || "Curated profile description aligned with target job listing while preserving 100% of authentic career history.",
+    requiredSkills: shared.requiredSkills?.length ? shared.requiredSkills : selectedSkills.slice(0, 8),
+    keyResponsibilities: shared.keyResponsibilities?.length ? shared.keyResponsibilities : ["Key role requirements identified and matched from candidate profile."],
+    extractedKeywords: shared.extractedKeywords?.length ? shared.extractedKeywords : selectedSkills.slice(0, 10),
   };
 
   const atsReport = generateAtsReport(profile, jobText, analysis, headline, summary);

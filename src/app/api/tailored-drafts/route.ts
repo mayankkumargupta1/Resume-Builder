@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getOptionalUser } from "@/lib/auth";
-import { getUserTailoredDrafts, getTailoredDraftById, updateTailoredDraft, deleteTailoredDraft } from "@/lib/db";
+import {
+  getUserTailoredDrafts,
+  getAllTailoredDrafts,
+  getTailoredDraftById,
+  updateTailoredDraft,
+  deleteTailoredDraft,
+} from "@/lib/db";
 
 export async function GET(req: Request) {
   try {
@@ -14,16 +20,17 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
+    const targetUserId = searchParams.get("userId") || undefined;
 
     if (id) {
-      const draft = await getTailoredDraftById(user.id, id);
+      const draft = await getTailoredDraftById(user.id, id, true);
       if (!draft) {
         return NextResponse.json({ success: false, error: "Draft not found" }, { status: 404 });
       }
       return NextResponse.json({ success: true, draft });
     }
 
-    const drafts = await getUserTailoredDrafts(user.id);
+    const drafts = await getAllTailoredDrafts(targetUserId);
     return NextResponse.json({ success: true, drafts });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -46,12 +53,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: "Draft ID required" }, { status: 400 });
     }
 
-    const ok = await updateTailoredDraft(user.id, id, { status, notes, title, company });
+    const ok = await updateTailoredDraft(user.id, id, { status, notes, title, company }, true);
     if (!ok) {
       return NextResponse.json({ success: false, error: "Failed to update draft or draft not found." }, { status: 404 });
     }
 
-    const updated = await getTailoredDraftById(user.id, id);
+    const updated = await getTailoredDraftById(user.id, id, true);
     return NextResponse.json({ success: true, draft: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -72,7 +79,7 @@ export async function DELETE(req: Request) {
     if (!id) {
       return NextResponse.json({ success: false, error: "Draft ID required" }, { status: 400 });
     }
-    const ok = await deleteTailoredDraft(user.id, id);
+    const ok = await deleteTailoredDraft(user.id, id, true);
     return NextResponse.json({ success: ok });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -5,7 +5,8 @@ import {
   loadThemes,
   loadSettings,
 } from "@/lib/profile-store";
-import { getUserTailoredDrafts } from "@/lib/db";
+import { getOptionalUser } from "@/lib/auth";
+import { getUserTailoredDrafts, getAllTailoredDrafts, getAllUsers } from "@/lib/db";
 import { ApplicationsTrackerView } from "@/components/applications-tracker-view";
 import { PaperSize } from "@/lib/enums";
 
@@ -18,14 +19,28 @@ export const dynamic = "force-dynamic";
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; candidateId?: string }>;
 }) {
   const uid = await getAuthenticatedUserIdForPage();
-  const profile = await loadProfile(uid);
-  const themes = await loadThemes(uid);
-  const settings = await loadSettings(uid);
-  const drafts = await getUserTailoredDrafts(uid);
+  const currentUser = await getOptionalUser();
+  const isAdmin = currentUser?.role === "admin";
   const resolvedParams = await searchParams;
+
+  const allUsers = await getAllUsers();
+  const candidates = allUsers
+    .filter((u) => u.id !== "usr_root" && u.email !== "admin@resumepipeline.com")
+    .map((u) => ({ id: u.id, name: u.name || u.email.split("@")[0], email: u.email }));
+
+  const drafts = await getAllTailoredDrafts(resolvedParams?.candidateId);
+
+  // Determine which user's profile and themes to load for the preview
+  const selectedDraftId = resolvedParams?.id || drafts[0]?.id;
+  const selectedDraft = drafts.find((d) => d.id === selectedDraftId);
+  const profileUserId = selectedDraft ? selectedDraft.user_id : uid;
+
+  const profile = await loadProfile(profileUserId);
+  const themes = await loadThemes(profileUserId);
+  const settings = await loadSettings(profileUserId);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -38,6 +53,9 @@ export default async function ApplicationsPage({
         includeReferences={settings.includeReferences}
         language={settings.language}
         initialSelectedId={resolvedParams?.id || null}
+        isAdmin={isAdmin}
+        candidates={candidates}
+        selectedCandidateId={resolvedParams?.candidateId || "all"}
       />
     </div>
   );

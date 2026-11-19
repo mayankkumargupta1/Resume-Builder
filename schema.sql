@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
 CREATE TABLE IF NOT EXISTS tailored_drafts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  generation_id TEXT,
   title TEXT NOT NULL,
   company TEXT NOT NULL,
   job_text TEXT NOT NULL,

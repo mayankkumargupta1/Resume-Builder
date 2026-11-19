@@ -80,6 +80,8 @@ async function runSchemaAndSeed(): Promise<void> {
       await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN NOT NULL DEFAULT FALSE");
       await client.query("ALTER TABLE tailored_drafts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'generated'");
       await client.query("ALTER TABLE tailored_drafts ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''");
+      await client.query("ALTER TABLE tailored_drafts ADD COLUMN IF NOT EXISTS generation_id TEXT");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_tailored_drafts_generation_id ON tailored_drafts(generation_id)");
       await client.query(
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS certifications_json JSONB NOT NULL DEFAULT '[]'::jsonb"
       );
@@ -191,6 +193,7 @@ function mapTailoredDraftRow(r: any): TailoredDraftRecord {
   return {
     id: r.id,
     user_id: r.user_id,
+    generation_id: r.generation_id || r.id,
     title: r.title,
     company: r.company,
     job_text: r.job_text,
@@ -589,6 +592,7 @@ export async function saveUserSettings(userId: string, settings: AppSettings): P
 export interface TailoredDraftRecord {
   id: string;
   user_id: string;
+  generation_id?: string;
   title: string;
   company: string;
   job_text: string;
@@ -612,16 +616,19 @@ export async function saveTailoredDraft(
     analysis: any;
     status?: string;
     notes?: string;
+    generation_id?: string;
   }
 ): Promise<string> {
   const id = `td_${crypto.randomBytes(8).toString("hex")}`;
+  const genId = draft.generation_id || id;
   await query(
     `INSERT INTO tailored_drafts (
-      id, user_id, title, company, job_text, match_score, status, notes, units_json, analysis_json, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, NOW(), NOW())`,
+      id, user_id, generation_id, title, company, job_text, match_score, status, notes, units_json, analysis_json, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW(), NOW())`,
     [
       id,
       userId,
+      genId,
       stripNullBytes(draft.title),
       stripNullBytes(draft.company),
       stripNullBytes(draft.job_text),
@@ -647,14 +654,35 @@ export async function getUserTailoredDrafts(userId: string): Promise<TailoredDra
 
 export async function getTailoredDraftById(
   userId: string,
-  draftId: string
+  draftId: string,
+  isAdmin: boolean = false
 ): Promise<TailoredDraftRecord | null> {
-  const res = await query(
-    `SELECT * FROM tailored_drafts
-     WHERE id = $1 AND user_id = $2`,
-    [draftId, userId]
-  );
+  const res = isAdmin
+    ? await query(`SELECT * FROM tailored_drafts WHERE id = $1`, [draftId])
+    : await query(`SELECT * FROM tailored_drafts WHERE id = $1 AND user_id = $2`, [draftId, userId]);
   return res.rows[0] ? mapTailoredDraftRow(res.rows[0]) : null;
+}
+
+export async function getAllTailoredDrafts(
+  targetUserId?: string
+): Promise<(TailoredDraftRecord & { userName?: string; userEmail?: string })[]> {
+  const queryStr = targetUserId
+    ? `SELECT d.*, u.name as user_name, u.email as user_email
+       FROM tailored_drafts d
+       JOIN users u ON d.user_id = u.id
+       WHERE d.user_id = $1
+       ORDER BY d.created_at DESC`
+    : `SELECT d.*, u.name as user_name, u.email as user_email
+       FROM tailored_drafts d
+       JOIN users u ON d.user_id = u.id
+       ORDER BY d.created_at DESC`;
+
+  const res = targetUserId ? await query(queryStr, [targetUserId]) : await query(queryStr);
+  return res.rows.map((row) => ({
+    ...mapTailoredDraftRow(row),
+    userName: row.user_name || "Unknown",
+    userEmail: row.user_email || "",
+  }));
 }
 
 export async function updateTailoredDraft(
@@ -667,13 +695,16 @@ export async function updateTailoredDraft(
     company?: string;
     analysis?: any;
     match_score?: number;
-  }
+  },
+  isAdmin: boolean = false
 ): Promise<boolean> {
   return withTransaction(async (client) => {
-    const existingRes = await client.query(
-      `SELECT * FROM tailored_drafts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-      [draftId, userId]
-    );
+    const existingRes = isAdmin
+      ? await client.query(`SELECT * FROM tailored_drafts WHERE id = $1 FOR UPDATE`, [draftId])
+      : await client.query(
+          `SELECT * FROM tailored_drafts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+          [draftId, userId]
+        );
     const existingRow = existingRes.rows[0];
     if (!existingRow) return false;
 
@@ -690,30 +721,51 @@ export async function updateTailoredDraft(
         ? Math.round(Number(updates.match_score))
         : existing.match_score;
 
-    const updateRes = await client.query(
-      `UPDATE tailored_drafts
-       SET status = $1, notes = $2, title = $3, company = $4, analysis_json = $5::jsonb, match_score = $6, updated_at = NOW()
-       WHERE id = $7 AND user_id = $8`,
-      [
-        nextStatus,
-        nextNotes,
-        nextTitle,
-        nextCompany,
-        toJsonParam(nextAnalysis),
-        nextMatchScore,
-        draftId,
-        userId,
-      ]
-    );
+    const updateRes = isAdmin
+      ? await client.query(
+          `UPDATE tailored_drafts
+           SET status = $1, notes = $2, title = $3, company = $4, analysis_json = $5::jsonb, match_score = $6, updated_at = NOW()
+           WHERE id = $7`,
+          [
+            nextStatus,
+            nextNotes,
+            nextTitle,
+            nextCompany,
+            toJsonParam(nextAnalysis),
+            nextMatchScore,
+            draftId,
+          ]
+        )
+      : await client.query(
+          `UPDATE tailored_drafts
+           SET status = $1, notes = $2, title = $3, company = $4, analysis_json = $5::jsonb, match_score = $6, updated_at = NOW()
+           WHERE id = $7 AND user_id = $8`,
+          [
+            nextStatus,
+            nextNotes,
+            nextTitle,
+            nextCompany,
+            toJsonParam(nextAnalysis),
+            nextMatchScore,
+            draftId,
+            userId,
+          ]
+        );
     return (updateRes.rowCount ?? 0) > 0;
   });
 }
 
-export async function deleteTailoredDraft(userId: string, draftId: string): Promise<boolean> {
-  const res = await query("DELETE FROM tailored_drafts WHERE id = $1 AND user_id = $2", [
-    draftId,
-    userId,
-  ]);
+export async function deleteTailoredDraft(
+  userId: string,
+  draftIdOrGenId: string,
+  isAdmin: boolean = false
+): Promise<boolean> {
+  const res = isAdmin
+    ? await query("DELETE FROM tailored_drafts WHERE id = $1 OR generation_id = $1", [draftIdOrGenId])
+    : await query(
+        "DELETE FROM tailored_drafts WHERE (id = $1 OR generation_id = $1) AND user_id = $2",
+        [draftIdOrGenId, userId]
+      );
   return (res.rowCount ?? 0) > 0;
 }
 
