@@ -7,6 +7,7 @@ import {
   loadSettings,
   loadThemes,
 } from "@/lib/profile-store";
+import { getOptionalUser } from "@/lib/auth";
 import { getTailoredDraftById } from "@/lib/db";
 import { BUILT_IN_THEMES, printCss } from "@/lib/themes";
 import { PaperSize } from "@/lib/enums";
@@ -23,14 +24,17 @@ export default async function PrintTailoredResumePage({
 }) {
   const { id } = await params;
   const uid = await getAuthenticatedUserIdForPage();
-  const draft = await getTailoredDraftById(uid, id);
+  const user = await getOptionalUser();
+  const isAdmin = user?.role === "admin";
+  const draft = await getTailoredDraftById(uid, id, isAdmin);
   if (!draft) {
     notFound();
   }
 
-  const profile = await loadProfile(uid);
-  const settings = await loadSettings(uid);
-  const themes = await loadThemes(uid);
+  // Load the draft candidate's authentic profile, settings, and themes
+  const profile = await loadProfile(draft.user_id);
+  const settings = await loadSettings(draft.user_id);
+  const themes = await loadThemes(draft.user_id);
   const theme = themes.find((t) => t.id === settings.baseThemeId) ?? BUILT_IN_THEMES[0];
   const paper = settings.paper === "A4" ? PaperSize.A4 : PaperSize.LETTER;
 

@@ -19,7 +19,7 @@ import { PAPER_SIZES, printCss, type ThemeData } from "@/lib/themes";
 import { deleteTheme, duplicateTheme, importTheme, saveTheme, setBaseTheme } from "@/components/themes/actions";
 import { draftFrom, ThemeBuilder, type ThemeDraft } from "@/components/themes/theme-builder";
 import { ThemePicker } from "@/components/themes/theme-picker";
-import { Printer, Sparkles, SlidersHorizontal, ArrowLeft, RefreshCw, Check, Globe, UploadCloud } from "lucide-react";
+import { Printer, Sparkles, SlidersHorizontal, ArrowLeft, RefreshCw, Check, Globe, UploadCloud, Download, Loader2 } from "lucide-react";
 import { CvImportModal } from "@/components/profile/cv-import-modal";
 
 export type ResumeWorkspaceProps = {
@@ -97,6 +97,39 @@ export function ResumeWorkspace({
 
   const [workspaceProfile, setWorkspaceProfile] = useState(profile);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      const res = await fetch("/api/export-pdf?type=base");
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to generate PDF.");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition");
+      let filename = "Resume.pdf";
+      if (disposition && disposition.includes("filename=")) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) filename = match[1];
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast("PDF downloaded successfully!");
+    } catch (err: any) {
+      console.error(err);
+      toast(err.message || "Failed to download PDF.");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     setWorkspaceProfile(profile);
@@ -408,11 +441,21 @@ export function ResumeWorkspace({
 
             <Button
               variant="primary"
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 cursor-pointer"
+              disabled={isDownloadingPdf}
+              onClick={handleDownloadPdf}
+              className="flex items-center gap-1.5 cursor-pointer shadow-raised"
             >
-              <Printer className="size-3.5" />
-              Download / Print PDF
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Generating PDF…</span>
+                </>
+              ) : (
+                <>
+                  <Download className="size-3.5" />
+                  <span>Download PDF</span>
+                </>
+              )}
             </Button>
           </div>
         }

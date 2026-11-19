@@ -19,10 +19,17 @@ RUN bun run build
 FROM base AS runner
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    fonts-liberation \
+    libnss3 \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV CHROME_BIN="/usr/bin/chromium"
 
 # Ensure ownership for non-root bun user
 RUN chown -R bun:bun /app
