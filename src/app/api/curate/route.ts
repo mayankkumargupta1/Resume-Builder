@@ -39,13 +39,13 @@ export async function POST(req: Request) {
     const { analysis, tailored } = await curateResumeForJob({
       profile,
       jobText,
-      provider: provider || "deepseek",
+      provider: provider || "gateway",
       apiKey,
-      modelName: modelName || "deepseek-v4.1",
+      modelName,
     });
 
-    // Persist the curated resume and the full job description in SQLite for tracking
-    const draftId = saveTailoredDraft(uid, {
+    // Persist the curated resume and the full job description in PostgreSQL for tracking
+    const draftId = await saveTailoredDraft(uid, {
       title: analysis.title || "Target Role",
       company: analysis.company || "Target Company",
       job_text: jobText,

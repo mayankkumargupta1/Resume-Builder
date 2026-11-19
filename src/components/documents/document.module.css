@@ -202,6 +202,51 @@
   break-inside: avoid;
 }
 
+/* 2-tier dual-sided corporate entry header */
+.stackedEntryHead {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1);
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+.entryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(var(--u) * 8);
+}
+
+.entryRowSub {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(var(--u) * 8);
+  font-size: 0.95em;
+}
+
+.entryCompany {
+  font-weight: 700;
+  color: var(--doc-ink);
+}
+
+.entryRole {
+  font-style: italic;
+  color: var(--doc-ink);
+}
+
+.entryLocation {
+  font-style: normal;
+  color: var(--doc-ink);
+  white-space: nowrap;
+}
+
+.datesBold {
+  font-weight: 700;
+  color: var(--doc-ink);
+}
+
 .entryTitle {
   font-weight: 600;
   color: var(--doc-ink);
@@ -231,6 +276,11 @@
 
 .bullets li {
   break-inside: avoid;
+}
+
+.bullets li.subBullet {
+  margin-inline-start: 1.4em;
+  list-style-type: circle;
 }
 
 .bullets li:first-child {

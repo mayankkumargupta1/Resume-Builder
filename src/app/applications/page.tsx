@@ -24,7 +24,7 @@ export default async function ApplicationsPage({
   const profile = await loadProfile(uid);
   const themes = await loadThemes(uid);
   const settings = await loadSettings(uid);
-  const drafts = getUserTailoredDrafts(uid);
+  const drafts = await getUserTailoredDrafts(uid);
   const resolvedParams = await searchParams;
 
   return (

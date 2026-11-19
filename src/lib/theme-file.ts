@@ -50,6 +50,9 @@ export const themeFieldsSchema = z.object({
   dateStyle: z.nativeEnum(DateStyle),
   photoShape: z.nativeEnum(PhotoShape),
   photoPosition: z.nativeEnum(PhotoPosition),
+  entryStyle: z.enum(["INLINE", "STACKED"]).optional(),
+  pipeContacts: z.boolean().optional(),
+  bulletSkills: z.boolean().optional(),
 });
 export type ThemeFields = z.output<typeof themeFieldsSchema>;
 

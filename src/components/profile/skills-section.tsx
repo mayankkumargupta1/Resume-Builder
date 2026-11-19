@@ -124,11 +124,15 @@ function SkillsCard({ profile, update }: { profile: ProfileData; update: UpdateP
 
   async function remove(id: string) {
     const before = profile;
-    // Removing a skill detaches it from every role too (PRO-3).
+    // Removing a skill detaches it from every role and project too (PRO-3).
     update((current) => ({
       ...current,
       skills: current.skills.filter((skill) => skill.id !== id),
       experience: current.experience.map((entry) => ({
+        ...entry,
+        skillIds: entry.skillIds.filter((skillId) => skillId !== id),
+      })),
+      projects: current.projects.map((entry) => ({
         ...entry,
         skillIds: entry.skillIds.filter((skillId) => skillId !== id),
       })),

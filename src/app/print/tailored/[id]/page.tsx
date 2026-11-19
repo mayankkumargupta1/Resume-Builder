@@ -23,7 +23,7 @@ export default async function PrintTailoredResumePage({
 }) {
   const { id } = await params;
   const uid = await getAuthenticatedUserIdForPage();
-  const draft = getTailoredDraftById(uid, id);
+  const draft = await getTailoredDraftById(uid, id);
   if (!draft) {
     notFound();
   }

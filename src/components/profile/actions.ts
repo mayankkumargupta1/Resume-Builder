@@ -255,6 +255,7 @@ const educationFields = z.object({
   id,
   degree: text(200),
   school: text(200),
+  location: text(200).optional().default(""),
   notes: text(1000),
   startYear: z.number().nullable(),
   startMonth: z.number().nullable(),
@@ -269,6 +270,7 @@ export const createEducation = action(z.object({}), async () => {
     id: `edu-${Date.now()}`,
     degree: "",
     school: "",
+    location: "",
     notes: "",
     startYear: new Date().getFullYear(),
     startMonth: null,
@@ -417,18 +419,32 @@ export const sortEntriesByDate = action(
   z.object({ section: z.enum(["experience", "project", "education"]) }),
   async ({ section }) => {
     const profile = await loadProfile();
-    const dateScore = (entry: any) =>
-      entry.current ? 999999 : (entry.endYear ?? entry.startYear ?? 0) * 100 + (entry.endMonth ?? entry.startMonth ?? 0);
+    const dateScore = (entry: any) => {
+      if (entry.current) {
+        const start = (entry.startYear ?? 0) * 100 + (entry.startMonth ?? 0);
+        return 90000000 + start;
+      }
+      const year = entry.endYear ?? entry.startYear ?? 0;
+      const month = entry.endYear ? (entry.endMonth ?? 12) : (entry.startMonth ?? 0);
+      return year * 100 + month;
+    };
+    const compare = (a: any, b: any) => {
+      const scoreDiff = dateScore(b) - dateScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      const startA = (a.startYear ?? 0) * 100 + (a.startMonth ?? 0);
+      const startB = (b.startYear ?? 0) * 100 + (b.startMonth ?? 0);
+      return startB - startA;
+    };
     if (section === "experience") {
-      profile.experience.sort((a, b) => dateScore(b) - dateScore(a));
+      profile.experience.sort(compare);
       await saveProfile(profile);
       return profile.experience.map((e) => e.id);
     } else if (section === "project") {
-      profile.projects.sort((a, b) => dateScore(b) - dateScore(a));
+      profile.projects.sort(compare);
       await saveProfile(profile);
       return profile.projects.map((p) => p.id);
     } else {
-      profile.education.sort((a, b) => dateScore(b) - dateScore(a));
+      profile.education.sort(compare);
       await saveProfile(profile);
       return profile.education.map((e) => e.id);
     }

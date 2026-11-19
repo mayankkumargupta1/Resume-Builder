@@ -334,14 +334,15 @@ export function ApplicationsTrackerView({
               </Button>
 
               {/* Print */}
-              <Button
-                variant="primary"
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 cursor-pointer"
+              <a
+                href={`/print/tailored/${previewDraft.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonClassName("primary", "sm") + " flex items-center gap-1.5 cursor-pointer"}
               >
                 <Printer className="size-3.5" />
                 <span>Print / PDF</span>
-              </Button>
+              </a>
             </div>
           </div>
 

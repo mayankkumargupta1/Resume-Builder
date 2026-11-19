@@ -33,6 +33,9 @@ const themeSchema = z.object({
   dateStyle: z.nativeEnum(DateStyle),
   photoShape: z.nativeEnum(PhotoShape),
   photoPosition: z.nativeEnum(PhotoPosition),
+  entryStyle: z.enum(["INLINE", "STACKED"]).optional(),
+  pipeContacts: z.boolean().optional(),
+  bulletSkills: z.boolean().optional(),
 });
 
 export const setBaseTheme = action(z.object({ id: z.string() }), async ({ id }) => {

@@ -125,13 +125,13 @@ export function Contact({ children }: { children: string }) {
   return <bdi dir={hasRightToLeft(children) ? undefined : "ltr"}>{children}</bdi>;
 }
 
-/** Contact details on one line, separated by "  ·  ". */
-export function ContactLine({ items }: { items: string[] }) {
+/** Contact details on one line, separated by "  ·  " or custom separator. */
+export function ContactLine({ items, separator = CONTACT_SEPARATOR }: { items: string[]; separator?: string }) {
   return (
     <p className={styles.contactLine}>
       {items.map((item, index) => (
         <Fragment key={index}>
-          {index > 0 && CONTACT_SEPARATOR}
+          {index > 0 && separator}
           <Contact>{item}</Contact>
         </Fragment>
       ))}

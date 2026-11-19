@@ -9,7 +9,7 @@ export type PageHeaderProps = {
 
 export function PageHeader({ title, description, actions, before }: PageHeaderProps) {
   return (
-    <div className="w-full shrink-0">
+    <div className="no-print w-full shrink-0">
       <PageBar>
         <div className="flex min-w-0 items-center gap-3">
           {before}

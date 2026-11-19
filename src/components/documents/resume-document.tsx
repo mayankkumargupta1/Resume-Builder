@@ -66,13 +66,25 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
       </DocumentSection>
     ),
     content.skills && (
-      <DocumentSection key="skills" title={labels.skills}>
-        {renderUnit({ id: "skills", children: <SkillLines text={content.skills} /> })}
+      <DocumentSection key="skills" title={resolved.otherSectionTitle ? "Other" : labels.skills}>
+        {renderUnit({ id: "skills", children: <SkillLines text={content.skills} bullet={resolved.bulletSkills} /> })}
       </DocumentSection>
     ),
     content.languages && (
       <DocumentSection key="languages" title={labels.languages}>
-        {renderUnit({ id: "languages", children: <p>{content.languages}</p> })}
+        {renderUnit({
+          id: "languages",
+          children: resolved.bulletSkills ? (
+            <ul className={styles.bullets}>
+              <li>
+                <strong className={styles.skillLabel}>{labels.languages}: </strong>
+                <span>{content.languages}</span>
+              </li>
+            </ul>
+          ) : (
+            <p>{content.languages}</p>
+          ),
+        })}
       </DocumentSection>
     ),
   ].filter(Boolean);
@@ -90,17 +102,20 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
             {renderUnit({
               id: `experience:${role.id}`,
               className: styles.entry,
-              head: <EntryHead title={role.role} at={role.company} dates={role.dates} timeline={resolved.timeline} />,
+              head: (
+                <EntryHead
+                  title={role.role}
+                  at={role.company}
+                  location={role.location}
+                  dates={role.dates}
+                  timeline={resolved.timeline}
+                  stacked={resolved.stackedEntries}
+                />
+              ),
               children: (
                 <>
                   {role.descriptor && <p className={styles.descriptor}>{role.descriptor}</p>}
-                  {role.bullets.length > 0 && (
-                    <ul className={styles.bullets}>
-                      {role.bullets.map((bullet, index) => (
-                        <li key={index}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
+                  {role.bullets.length > 0 && <BulletList bullets={role.bullets} />}
                   {role.skills.length > 0 && (
                     <p className={styles.entrySkills}>
                       <span className={styles.accent}>{`${labels.skills} · `}</span>
@@ -127,17 +142,12 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
                   at={project.link && <Contact>{project.link}</Contact>}
                   dates={project.dates}
                   timeline={resolved.timeline}
+                  stacked={resolved.stackedEntries}
                 />
               ),
               children: (
                 <>
-                  {project.bullets.length > 0 && (
-                    <ul className={styles.bullets}>
-                      {project.bullets.map((bullet, index) => (
-                        <li key={index}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
+                  {project.bullets.length > 0 && <BulletList bullets={project.bullets} />}
                   {project.skills.length > 0 && (
                     <p className={styles.entrySkills}>
                       <span className={styles.accent}>{`${labels.skills} · `}</span>
@@ -158,8 +168,28 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
             {renderUnit({
               id: `education:${entry.id}`,
               className: styles.entry,
-              head: <EntryHead title={entry.degree} at={entry.school} dates={entry.dates} timeline={resolved.timeline} />,
-              children: entry.notes && <p className={styles.muted}>{entry.notes}</p>,
+              head: (
+                <EntryHead
+                  title={entry.degree}
+                  at={entry.school}
+                  location={entry.location}
+                  dates={entry.dates}
+                  timeline={resolved.timeline}
+                  stacked={resolved.stackedEntries}
+                />
+              ),
+              children: entry.notes && (
+                resolved.stackedEntries ? (
+                  <ul className={styles.bullets}>
+                    {entry.notes.split("\n").filter(Boolean).map((bullet, index) => {
+                      const cleanBullet = bullet.trimStart().replace(/^[•\-\*◦o]\s*/, "");
+                      return <li key={index}>{cleanBullet}</li>;
+                    })}
+                  </ul>
+                ) : (
+                  <p className={styles.muted}>{entry.notes}</p>
+                )
+              ),
             })}
           </Fragment>
         ))}
@@ -179,6 +209,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
                       at={entry.issuer}
                       dates={entry.dates}
                       timeline={resolved.timeline}
+                      stacked={resolved.stackedEntries}
                     />
                   ),
                   children: entry.link && (
@@ -256,7 +287,12 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
     <>
       <h1 className={styles.name}>{content.name}</h1>
       {content.headline && <p className={styles.headline}>{content.headline}</p>}
-      {!resolved.split && content.contacts.length > 0 && <ContactLine items={content.contacts} />}
+      {!resolved.split && content.contacts.length > 0 && (
+        <ContactLine
+          items={content.contacts}
+          separator={resolved.pipeContacts ? " | " : undefined}
+        />
+      )}
     </>
   );
   // A photo beside the name puts the name, headline and contacts in a block of their own.
@@ -311,12 +347,78 @@ const breakAfterDash = (dates: string) =>
     .join(" – ");
 
 /**
+ * Formats a list of bullets with support for nested sub-bullets.
+ */
+function BulletList({ bullets }: { bullets: string[] }) {
+  return (
+    <ul className={styles.bullets}>
+      {bullets.map((bullet, index) => {
+        const isSub =
+          bullet.startsWith("  ") ||
+          bullet.startsWith("\t") ||
+          bullet.trimStart().startsWith("◦") ||
+          bullet.trimStart().startsWith("o ");
+        const text = bullet.trimStart().replace(/^[•\-\*◦o]\s*/, "");
+        return (
+          <li key={index} className={cn(isSub && styles.subBullet)}>
+            {text}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
  * "Senior Product Designer, Northwind Logistics" with the dates at the end of
  * the line, or before it in a timeline column (the dates come first then, so
  * they float into the column next to the title).
+ *
+ * For stacked/corporate themes:
+ * Row 1: Company/Org (bold) <---> Dates (bold)
+ * Row 2: Title/Role (italic) <---> Location (regular)
  */
-function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNode; dates: string; timeline: boolean }) {
-  const datesSpan = dates && <span className={styles.dates}>{timeline ? breakAfterDash(dates) : dates}</span>;
+function EntryHead({
+  title,
+  at,
+  location,
+  dates,
+  timeline,
+  stacked,
+}: {
+  title: string;
+  at?: ReactNode;
+  location?: ReactNode;
+  dates: string;
+  timeline: boolean;
+  stacked?: boolean;
+}) {
+  const datesSpan = dates && (
+    <span className={cn(styles.dates, stacked && styles.datesBold)}>
+      {timeline ? breakAfterDash(dates) : dates}
+    </span>
+  );
+
+  if (stacked) {
+    const org = at || title;
+    const roleOrDegree = at ? title : null;
+
+    return (
+      <div className={styles.stackedEntryHead}>
+        <div className={styles.entryRow}>
+          <span className={styles.entryCompany}>{org}</span>
+          {datesSpan}
+        </div>
+        {(roleOrDegree || location) && (
+          <div className={styles.entryRowSub}>
+            {roleOrDegree ? <span className={styles.entryRole}>{roleOrDegree}</span> : <span />}
+            {location && <span className={styles.entryLocation}>{location}</span>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.entryHead}>
       {timeline && datesSpan}
@@ -328,6 +430,12 @@ function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNod
             {at}
           </>
         )}
+        {location && (
+          <span className={styles.muted}>
+            {" · "}
+            {location}
+          </span>
+        )}
       </p>
       {!timeline && datesSpan}
     </div>
@@ -335,18 +443,41 @@ function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNod
 }
 
 /** The Skills section: a line per group, led by the group's name (#280). */
-function SkillLines({ text }: { text: string }) {
-  return text
+function SkillLines({ text, bullet }: { text: string; bullet?: boolean }) {
+  const items = text
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const { label, text: skills } = skillLine(line);
-      return (
-        <p key={index} className={styles.skillLine}>
-          {label && <strong className={styles.skillLabel}>{label}: </strong>}
-          {skills}
-        </p>
-      );
-    });
+    .filter(Boolean);
+
+  if (bullet) {
+    return (
+      <ul className={styles.bullets}>
+        {items.map((line, index) => {
+          const { label, text: skills } = skillLine(line);
+          return (
+            <li key={index}>
+              {label ? (
+                <>
+                  <strong className={styles.skillLabel}>{label}: </strong>
+                  <span>{skills}</span>
+                </>
+              ) : (
+                <span>{skills}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return items.map((line, index) => {
+    const { label, text: skills } = skillLine(line);
+    return (
+      <p key={index} className={styles.skillLine}>
+        {label && <strong className={styles.skillLabel}>{label}: </strong>}
+        {skills}
+      </p>
+    );
+  });
 }
