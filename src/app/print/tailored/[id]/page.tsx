@@ -24,9 +24,7 @@ export default async function PrintTailoredResumePage({
 }) {
   const { id } = await params;
   const uid = await getAuthenticatedUserIdForPage();
-  const user = await getOptionalUser();
-  const isAdmin = user?.role === "admin";
-  const draft = await getTailoredDraftById(uid, id, isAdmin);
+  const draft = await getTailoredDraftById(uid, id, true);
   if (!draft) {
     notFound();
   }

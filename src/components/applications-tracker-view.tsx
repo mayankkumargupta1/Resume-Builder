@@ -92,21 +92,52 @@ export function ApplicationsTrackerView({
     [themes, activeThemeId]
   );
 
-  // Switch preview draft and dynamically fetch candidate profile if admin
-  const handleSelectPreviewDraft = async (draft: TailoredDraftRecord & { userName?: string; userEmail?: string }) => {
+  // Cache candidate profiles to switch instantly without redundant fetches
+  const [profileCache, setProfileCache] = useState<Record<string, ProfileData>>(() => {
+    return profile?.basics?.name ? { [profile.basics.name]: profile } : {};
+  });
+
+  // Switch preview draft and dynamically fetch candidate profile
+  const handleSelectPreviewDraft = async (
+    draft: TailoredDraftRecord & { userName?: string; userEmail?: string }
+  ) => {
     setPreviewDraft(draft);
-    if (isAdmin && draft.user_id) {
-      try {
-        const res = await fetch(`/api/profile?userId=${draft.user_id}`);
-        const data = await res.json();
-        if (data.success && data.profile) {
-          setActiveProfile(data.profile);
-        }
-      } catch {
-        // ignore
+    if (!draft.user_id) return;
+
+    if (profileCache[draft.user_id]) {
+      setActiveProfile(profileCache[draft.user_id]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/profile?userId=${draft.user_id}`);
+      const data = await res.json();
+      if (data.success && data.profile) {
+        setProfileCache((prev) => ({ ...prev, [draft.user_id]: data.profile }));
+        setActiveProfile(data.profile);
       }
+    } catch {
+      // ignore
     }
   };
+
+  useEffect(() => {
+    if (previewDraft?.user_id) {
+      if (profileCache[previewDraft.user_id]) {
+        setActiveProfile(profileCache[previewDraft.user_id]);
+      } else {
+        fetch(`/api/profile?userId=${previewDraft.user_id}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success && data.profile) {
+              setProfileCache((prev) => ({ ...prev, [previewDraft.user_id]: data.profile }));
+              setActiveProfile(data.profile);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [previewDraft?.id, previewDraft?.user_id]);
 
   // Filtered list
   const filteredDrafts = useMemo(() => {

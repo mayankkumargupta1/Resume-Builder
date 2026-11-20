@@ -41,7 +41,7 @@ export async function GET(req: Request) {
         );
       }
 
-      const draft = await getTailoredDraftById(user.id, draftId, user.role === "admin");
+      const draft = await getTailoredDraftById(user.id, draftId, true);
       if (!draft) {
         return NextResponse.json(
           { success: false, error: "Tailored draft not found." },

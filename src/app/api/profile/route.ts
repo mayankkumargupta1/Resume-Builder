@@ -15,8 +15,8 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const targetUserId = searchParams.get("userId");
-    // Admin can read non-admin candidate profiles (read-only for preview and tailoring)
-    const uid = user.role === "admin" && targetUserId ? targetUserId : user.id;
+    // Any authenticated user can read candidate profiles for preview and tailoring
+    const uid = targetUserId || user.id;
 
     const profile = await loadProfile(uid);
     return NextResponse.json({ success: true, profile });
